@@ -1,0 +1,7 @@
+packages:
+  - backend
+  - frontend
+
+onlyBuiltDependencies:
+  - "@parcel/watcher"
+  - esbuild

@@ -1,0 +1,25 @@
+{
+  "name": "robinshark-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build --logLevel=silent",
+    "dev": "nuxt dev --host 0.0.0.0 --port ${PASEO_PORT:-3000}",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@nuxt/fonts": "^0.14.0",
+    "@nuxt/icon": "^2.3.1",
+    "@vueuse/core": "^14.3.0",
+    "@vueuse/nuxt": "^14.3.0",
+    "nuxt": "^4.4.4",
+    "vue": "^3.5.33",
+    "vue-router": "^5.0.6"
+  },
+  "devDependencies": {
+    "@iconify-json/ph": "^1.2.2",
+    "typescript": "~5.8.3",
+    "vue-tsc": "^3.3.7"
+  }
+}

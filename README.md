@@ -1,0 +1,126 @@
+# robinshark
+
+Encore + Nuxt app deployed by `nstack`.
+
+## Local
+
+```sh
+nstack setup
+pnpm dev
+# or
+nstack dev
+pnpm worktree
+nstack devexec 'await apiJson("/status")'
+pnpm check
+# or
+nstack check
+```
+
+`nstack init` installs dependencies and approves pnpm build scripts before the
+initial git commit. If this app was copied manually or cloned fresh, run
+`nstack setup` to install dependencies, bootstrap pnpm through Corepack when
+needed, install the Encore CLI when it is missing, and check Docker only when
+declared Encore resources need it.
+
+The Nuxt frontend calls Encore through `apiClient()` in
+`frontend/app/utils/api.ts`, backed by the generated client in
+`frontend/app/generated/encore-client.ts`. `pnpm dev` calls `nstack dev`, which
+runs the Encore backend, generated client watcher, and Nuxt frontend. On a fresh
+clone, `pnpm dev` and `pnpm check` reuse the CLI setup path before starting
+work. They stop with direct instructions when Docker is not running or cannot be
+accessed. The watcher only rewrites the client when the generated output
+changes, so Nuxt HMR is not triggered by backend edits that leave the API
+surface unchanged. `pnpm check`, `pnpm build`, and `nstack deploy` keep it
+updated automatically. Use `nstack client gen` only when you explicitly want to
+regenerate it. Generation and deploy metadata use local Encore commands for
+Dokploy/nstack targets.
+
+`backend/encore.app` intentionally leaves the Encore app id empty. That keeps
+local `encore run` and `encore check` in Encore's local-only mode so they do not
+fetch Encore Cloud secrets. Use `nstack.config.mjs` `app.slug` for app identity
+in nstack and Dokploy; only fill the Encore id when intentionally linking this
+repo to Encore Cloud.
+
+When `nstack dev` detects an AI coding harness such as Codex, Claude Code, or a
+custom `NSTACK_AGENT_HARNESS=<name>` value, it refuses to start a long-running
+dev server by default. Agents should use `nstack devexec '<js>'` for one-shot
+checks against a temporary dev stack. Set `AI_ALLOW_DEVSERVER=1` only when an
+agent truly needs an interactive dev server.
+
+## Frontend
+
+Nuxt pages live in `frontend/app/pages`; their file paths define their URLs.
+The default layout in `frontend/app/layouts/default.vue` provides shared
+navigation. Use `NuxtLink` for internal links and `apiClient()` inside
+`useAsyncData()` for SSR calls to Encore. The starter includes Nuxt Icon, Nuxt
+Fonts, VueUse, and a `/status` route with loading and error states. `pnpm check`
+also type-checks Vue templates and route components. Source comments marked
+`NSTACK_TEMPLATE_CLEANUP` list the starter pages and navbar to replace during
+the first coding task while retaining the layout and frontend foundation.
+
+## Deploy
+
+Point the domain at your Dokploy server. If this app was not linked during
+`nstack init`, run:
+
+```sh
+nstack configure --domain <domain> --dokploy-url https://dokploy.example.com --dokploy-api-key <key> --repository https://github.com/acme/robinshark.git
+nstack deploy
+```
+
+After that, the usual loop is small:
+
+```sh
+pnpm check
+# or
+nstack check
+nstack deploy
+nstack status
+```
+
+If this app has multiple local deploy targets, interactive `nstack deploy` asks
+which environment to deploy. Automation should pass `--env <name>`.
+
+Deploy settings live in `.nstack/local.env`. App runtime secrets live in
+`.nstack/secrets.env`. nstack writes these files with private local
+permissions.
+
+This app can live in a monorepo without a nested Git repository. Run commands
+from the app directory or pass `--cwd <app-dir>`; nstack scopes generated deploy
+artifacts, client sync, local `.nstack` state, and source-backed Git dirty checks
+to this app. For subdirectory source-backed deploys, nstack defaults Dokploy
+`composePath` and `watchPaths` to the app path unless you override them.
+
+For deploy-on-push, connect the matching Git provider in Dokploy first. nstack
+can configure provider-backed Compose sources for GitHub, GitLab, Bitbucket, and
+Gitea/Forgejo. Use `deploy.source` in `nstack.config.mjs` for advanced provider
+fields such as explicit provider ids, GitLab path namespace, Bitbucket slug, or
+custom plain-Git SSH key id.
+
+## Secrets
+
+```sh
+nstack env set API_SECRET
+nstack env push
+```
+
+Use `nstack env pull --all` when remote env changed and you want to refresh
+local secrets.
+
+## Recovery
+
+```sh
+nstack doctor
+nstack logs --follow
+nstack pull
+nstack rollback
+```
+
+`nstack` provisions declared Encore resources automatically. Dokploy
+Domains/Traefik handle ingress; there is no proxy container in this template.
+By default Dokploy builds the production Nuxt server and Encore backend from
+source through Compose, so no external image registry is required.
+
+Encore cron jobs are registered as Dokploy schedules. Keep cron endpoints
+private with `api({ expose: false }, ...)`; Dokploy executes them through the
+bundled backend cron runner instead of calling a public HTTP route.

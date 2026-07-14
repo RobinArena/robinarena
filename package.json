@@ -1,0 +1,28 @@
+{
+  "name": "robinshark",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "nstack setup",
+    "dev": "nstack dev",
+    "devexec": "nstack devexec",
+    "worktree": "AI_ALLOW_DEVSERVER=1 PASEO_PORT=${PASEO_PORT:-3000} nstack dev",
+    "build": "nstack client gen && pnpm --dir frontend build",
+    "check": "nstack check",
+    "deploy": "nstack deploy",
+    "status": "nstack status"
+  },
+  "packageManager": "pnpm@10.18.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://encore.dev/schemas/infra.schema.json",
+  "metadata": {
+    "app_id": "robinshark",
+    "env_name": "prod",
+    "env_type": "production",
+    "cloud": "local",
+    "base_url": "https://robinshark.playground.nik.technology/api"
+  },
+  "graceful_shutdown": {
+    "total": 30
+  },
+  "hosted_services": [
+    "api"
+  ],
+  "hosted_gateways": [
+    "api-gateway"
+  ],
+  "cors": {
+    "allow_origins_with_credentials": [
+      "https://robinshark.playground.nik.technology"
+    ],
+    "allow_headers": [
+      "Authorization",
+      "Content-Type",
+      "X-Requested-With"
+    ],
+    "expose_headers": [
+      "x-encore-trace-id",
+      "X-Request-Id"
+    ]
+  },
+  "secrets": {
+    "ArenaOperatorKey": {
+      "$env": "ArenaOperatorKey"
+    },
+    "OpenRouterAPIKey": {
+      "$env": "OpenRouterAPIKey"
+    }
+  },
+  "sql_servers": [
+    {
+      "host": "robinshark-postgres-ib8xmr:5432",
+      "tls_config": {
+        "disabled": true
+      },
+      "databases": {
+        "app": {
+          "name": "app",
+          "username": "nstack",
+          "password": {
+            "$env": "NSTACK_POSTGRES_PASSWORD"
+          },
+          "min_connections": 1,
+          "max_connections": 30
+        }
+      }
+    }
+  ]
+}

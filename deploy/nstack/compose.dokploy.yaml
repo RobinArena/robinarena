@@ -83,6 +83,10 @@ services:
       NSTACK_POSTGRES_PASSWORD: "${NSTACK_POSTGRES_PASSWORD:?set NSTACK_POSTGRES_PASSWORD}"
       ArenaOperatorKey: "${ArenaOperatorKey:?set ArenaOperatorKey}"
       OpenRouterAPIKey: "${OpenRouterAPIKey:?set OpenRouterAPIKey}"
+      RobinhoodCryptoAPIKey: "${RobinhoodCryptoAPIKey:?set RobinhoodCryptoAPIKey}"
+      RobinhoodCryptoPrivateKey: "${RobinhoodCryptoPrivateKey:?set RobinhoodCryptoPrivateKey}"
+      RobinhoodCryptoPublicKey: "${RobinhoodCryptoPublicKey:?set RobinhoodCryptoPublicKey}"
+      RobinhoodMCPAccessToken: "${RobinhoodMCPAccessToken:?set RobinhoodMCPAccessToken}"
     expose:
       - "8080"
     networks:

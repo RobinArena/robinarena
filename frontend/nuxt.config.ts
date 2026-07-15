@@ -13,7 +13,28 @@ const serverApiBaseUrl =
 
 export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
+  devtools: { enabled: false },
   modules: ["@nuxt/fonts", "@nuxt/icon", "@vueuse/nuxt"],
+  icon: {
+    provider: "none",
+    clientBundle: {
+      scan: true,
+      icons: [
+        "ph:arrow-line-down",
+        "ph:arrows-clockwise",
+        "ph:check-circle",
+        "ph:circle-notch",
+        "ph:link",
+        "ph:pause-circle",
+        "ph:play-circle",
+        "ph:play-fill",
+        "ph:shield-check",
+        "ph:sign-in",
+        "ph:stop-circle",
+        "ph:warning-circle",
+      ],
+    },
+  },
   css: ["~/assets/css/main.css"],
   future: {
     compatibilityVersion: 4,
@@ -28,6 +49,12 @@ export default defineNuxtConfig({
       meta: [
         { name: "viewport", content: "width=device-width, initial-scale=1" },
         { name: "theme-color", content: "#0a0c0a" },
+      ],
+      link: [
+        { rel: "icon", type: "image/x-icon", href: "/favicon.ico" },
+        { rel: "icon", type: "image/png", sizes: "64x64", href: "/favicon.png" },
+        { rel: "apple-touch-icon", sizes: "192x192", href: "/icon-192.png" },
+        { rel: "manifest", href: "/site.webmanifest" },
       ],
     },
     pageTransition: {

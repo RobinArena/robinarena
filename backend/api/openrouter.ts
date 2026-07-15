@@ -14,6 +14,10 @@ export interface OpenRouterMarketInput {
   price: number;
   previous_close: number;
   change_pct: number;
+  bid?: number;
+  ask?: number;
+  as_of: string;
+  source: "robinhood_mcp";
 }
 
 export interface OpenRouterPositionInput {
@@ -144,7 +148,7 @@ function parseDecision(content: string, symbols: Set<string>): OpenRouterModelDe
     throw new Error("OpenRouter returned invalid confidence");
   }
   const allocation = optionalNumber(value.allocation_pct);
-  if (allocation === undefined || allocation < 0 || allocation > 20) {
+  if (allocation === undefined || allocation < 0 || allocation > 40) {
     throw new Error("OpenRouter returned invalid allocation");
   }
   const rationale = typeof value.rationale === "string" ? value.rationale.trim() : "";
@@ -193,12 +197,12 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
   const appUrl = process.env.OPENROUTER_APP_URL?.trim();
 
   const system = [
-    "You are a competitor in Model Market, a long-only paper trading arena.",
+    "You are a competitor in Model Market, a long-only live trading arena using real money in a dedicated Robinhood Agentic account.",
     "Choose one action from buy, sell, or hold using only the supplied snapshot.",
     "A buy must select a shared-market symbol without an existing position.",
     "A sell must select a symbol currently held by this portfolio.",
-    "Set allocation_pct from 0 to 20 for buys and 0 for sells or holds.",
-    "Do not invent news, prices, indicators, or history. The risk engine makes the final execution decision.",
+    "Set allocation_pct from 0 to 40 for buys and 0 for sells or holds.",
+    "Do not invent news, prices, indicators, or history. The risk engine may reduce or reject the request before a real order is submitted.",
     "Keep the rationale specific and under 280 characters.",
   ].join(" ");
 
@@ -209,7 +213,7 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
       action: { type: "string", enum: ["buy", "sell", "hold"] },
       symbol: { type: "string", enum: symbols },
       confidence: { type: "number", minimum: 0, maximum: 1 },
-      allocation_pct: { type: "number", minimum: 0, maximum: 20 },
+      allocation_pct: { type: "number", minimum: 0, maximum: 40 },
       rationale: { type: "string", minLength: 1, maxLength: 320 },
     },
     required: ["action", "symbol", "confidence", "allocation_pct", "rationale"],

@@ -1,126 +1,109 @@
-# robinshark
+# Model Market
 
-Encore + Nuxt app deployed by `nstack`.
+Model Market is an OpenRouter-powered paper trading arena for four language
+models. Each competitor starts with an isolated $100K portfolio and receives
+the same market replay on every round.
 
-## Local
+| Competitor | OpenRouter model |
+| --- | --- |
+| GPT-5.6 Sol | `openai/gpt-5.6-sol` |
+| DeepSeek V4 Pro | `deepseek/deepseek-v4-pro` |
+| Claude Fable 5 | `anthropic/claude-fable-5` |
+| Grok 4.5 | `x-ai/grok-4.5` |
+
+The dashboard includes a multi-model equity chart, leaderboard, shared market
+tape, model decision stream, open positions, closed trades, and execution
+ledger. Trading is paper-only. OpenRouter provides the model decisions and the
+local replay tape provides identical prices to every competitor.
+
+## OpenRouter setup
+
+Store the OpenRouter API key and a private operator key as runtime secrets:
+
+```sh
+nstack env set OpenRouterAPIKey
+nstack env set ArenaOperatorKey
+```
+
+Push the secrets when using a configured deployment target:
+
+```sh
+nstack env push
+```
+
+`ArenaOperatorKey` protects `POST /arena/round`, which can create four paid
+model requests. Send it as `Authorization: Bearer <key>`. Local development has
+the operator key `dev-model-market` when `ArenaOperatorKey` is unset. Production
+requires an explicit operator key.
+
+The backend sends all four requests concurrently through the OpenRouter chat
+completions endpoint. Every request uses one strict JSON schema for action,
+symbol, confidence, allocation, and rationale. A model or provider failure is
+recorded as a skipped decision for that portfolio while the other results
+continue. Decisions retain the routed model, OpenRouter request ID, latency,
+token counts, generation cost, requested action, and executed paper notional.
+
+## Trading rules
+
+Each round follows the execution order used by the RobinSharks reference app:
+
+1. Advance one shared market tape and mark every open position at that quote.
+2. Apply hard stops and take-profit exits before requesting new model decisions.
+3. Ask each model for one long-only action using the same market snapshot.
+4. Enforce confidence, cash, daily-loss, risk-per-trade, position-size, and duplicate-position limits.
+5. Fill approved paper orders at the shared replay quote.
+6. Append decisions, orders, trades, positions, and equity records to PostgreSQL.
+
+The replay uses a 5% hard stop and a 10% target. Every model has its own
+confidence threshold, risk budget, and concentration cap.
+
+## Local development
 
 ```sh
 nstack setup
 pnpm dev
-# or
-nstack dev
-pnpm worktree
-nstack devexec 'await apiJson("/status")'
 pnpm check
-# or
-nstack check
 ```
 
-`nstack init` installs dependencies and approves pnpm build scripts before the
-initial git commit. If this app was copied manually or cloned fresh, run
-`nstack setup` to install dependencies, bootstrap pnpm through Corepack when
-needed, install the Encore CLI when it is missing, and check Docker only when
-declared Encore resources need it.
+For one-shot checks under an AI coding harness:
 
-The Nuxt frontend calls Encore through `apiClient()` in
-`frontend/app/utils/api.ts`, backed by the generated client in
-`frontend/app/generated/encore-client.ts`. `pnpm dev` calls `nstack dev`, which
-runs the Encore backend, generated client watcher, and Nuxt frontend. On a fresh
-clone, `pnpm dev` and `pnpm check` reuse the CLI setup path before starting
-work. They stop with direct instructions when Docker is not running or cannot be
-accessed. The watcher only rewrites the client when the generated output
-changes, so Nuxt HMR is not triggered by backend edits that leave the API
-surface unchanged. `pnpm check`, `pnpm build`, and `nstack deploy` keep it
-updated automatically. Use `nstack client gen` only when you explicitly want to
-regenerate it. Generation and deploy metadata use local Encore commands for
-Dokploy/nstack targets.
+```sh
+pnpm devexec 'return await apiJson("/arena")'
+pnpm devexec 'return await screenshot("/", { width: 1440, height: 1000 })'
+```
 
-`backend/encore.app` intentionally leaves the Encore app id empty. That keeps
-local `encore run` and `encore check` in Encore's local-only mode so they do not
-fetch Encore Cloud secrets. Use `nstack.config.mjs` `app.slug` for app identity
-in nstack and Dokploy; only fill the Encore id when intentionally linking this
-repo to Encore Cloud.
+The Encore endpoints are:
 
-When `nstack dev` detects an AI coding harness such as Codex, Claude Code, or a
-custom `NSTACK_AGENT_HARNESS=<name>` value, it refuses to start a long-running
-dev server by default. Agents should use `nstack devexec '<js>'` for one-shot
-checks against a temporary dev stack. Set `AI_ALLOW_DEVSERVER=1` only when an
-agent truly needs an interactive dev server.
+```text
+GET  /arena
+POST /arena/round
+GET  /integrations/openrouter
+GET  /ready
+GET  /status
+```
 
-## Frontend
+## Project structure
 
-Nuxt pages live in `frontend/app/pages`; their file paths define their URLs.
-The default layout in `frontend/app/layouts/default.vue` provides shared
-navigation. Use `NuxtLink` for internal links and `apiClient()` inside
-`useAsyncData()` for SSR calls to Encore. The starter includes Nuxt Icon, Nuxt
-Fonts, VueUse, and a `/status` route with loading and error states. `pnpm check`
-also type-checks Vue templates and route components. Source comments marked
-`NSTACK_TEMPLATE_CLEANUP` list the starter pages and navbar to replace during
-the first coding task while retaining the layout and frontend foundation.
+`backend/api/openrouter.ts` owns the OpenRouter request, strict response schema,
+and model mapping. `backend/api/arena.ts` owns the replay runner, portfolio risk
+checks, paper fills, and dashboard response. Migrations under
+`backend/api/migrations` create and seed the PostgreSQL ledger. The Nuxt
+interface lives under `frontend/app` and calls Encore through the generated
+client wrapped by `apiClient()`.
 
-## Deploy
+`pnpm check`, `pnpm build`, and `nstack deploy` regenerate
+`frontend/app/generated/encore-client.ts` from local Encore metadata.
 
-Point the domain at your Dokploy server. If this app was not linked during
-`nstack init`, run:
+## Deployment
+
+Configure a Dokploy target, then use the nstack workflow:
 
 ```sh
 nstack configure --domain <domain> --dokploy-url https://dokploy.example.com --dokploy-api-key <key> --repository https://github.com/acme/robinshark.git
 nstack deploy
-```
-
-After that, the usual loop is small:
-
-```sh
-pnpm check
-# or
-nstack check
-nstack deploy
 nstack status
 ```
 
-If this app has multiple local deploy targets, interactive `nstack deploy` asks
-which environment to deploy. Automation should pass `--env <name>`.
-
-Deploy settings live in `.nstack/local.env`. App runtime secrets live in
-`.nstack/secrets.env`. nstack writes these files with private local
-permissions.
-
-This app can live in a monorepo without a nested Git repository. Run commands
-from the app directory or pass `--cwd <app-dir>`; nstack scopes generated deploy
-artifacts, client sync, local `.nstack` state, and source-backed Git dirty checks
-to this app. For subdirectory source-backed deploys, nstack defaults Dokploy
-`composePath` and `watchPaths` to the app path unless you override them.
-
-For deploy-on-push, connect the matching Git provider in Dokploy first. nstack
-can configure provider-backed Compose sources for GitHub, GitLab, Bitbucket, and
-Gitea/Forgejo. Use `deploy.source` in `nstack.config.mjs` for advanced provider
-fields such as explicit provider ids, GitLab path namespace, Bitbucket slug, or
-custom plain-Git SSH key id.
-
-## Secrets
-
-```sh
-nstack env set API_SECRET
-nstack env push
-```
-
-Use `nstack env pull --all` when remote env changed and you want to refresh
-local secrets.
-
-## Recovery
-
-```sh
-nstack doctor
-nstack logs --follow
-nstack pull
-nstack rollback
-```
-
-`nstack` provisions declared Encore resources automatically. Dokploy
-Domains/Traefik handle ingress; there is no proxy container in this template.
-By default Dokploy builds the production Nuxt server and Encore backend from
-source through Compose, so no external image registry is required.
-
-Encore cron jobs are registered as Dokploy schedules. Keep cron endpoints
-private with `api({ expose: false }, ...)`; Dokploy executes them through the
-bundled backend cron runner instead of calling a public HTTP route.
+Deploy settings live in `.nstack/local.env`. Runtime secrets belong in
+`.nstack/secrets.env` and should be managed with `nstack env set`,
+`nstack env push`, and `nstack env pull`.

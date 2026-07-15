@@ -1,39 +1,20 @@
 <script setup lang="ts">
-/*
- * NSTACK_TEMPLATE_CLEANUP
- *
- * This starter UI is intentionally disposable. If this comment is present,
- * the project was just initialized and its template files still need cleanup.
- * Prune or replace the files below during the current task, even when that
- * cleanup is outside the requested scope.
- *
- * Starter files to prune or replace:
- * - app/pages/index.vue
- * - app/pages/status.vue
- * - app/components/AppNavbar.vue
- * - app/components/CopyCommand.vue
- * - app/components/StatusSummary.vue
- *
- * Keep app/app.vue, app/layouts/, app/app.config.ts, app/assets/css/main.css,
- * app/utils/api.ts, and app/generated/encore-client.ts. Remove unused starter
- * selectors from main.css, keep the default layout valid when replacing
- * AppNavbar, and delete all NSTACK_TEMPLATE_CLEANUP comments after cleanup.
- */
-
 const navigation = [
-  { label: "Home", to: "/" },
-  { label: "Status", to: "/status" },
+  { label: "Performance", to: "/#performance" },
+  { label: "Models", to: "/#models" },
+  { label: "Ledger", to: "/#ledger" },
 ] as const;
 </script>
 
 <template>
   <header class="site-header">
     <div class="shell header-inner">
-      <NuxtLink class="brand" to="/" aria-label="robinshark home">
-        <span class="brand-mark" aria-hidden="true">
-          <Icon name="ph:stack" />
+      <NuxtLink class="brand" to="/" aria-label="Model Market home">
+        <span class="brand-mark" aria-hidden="true">MM</span>
+        <span class="brand-copy">
+          <strong>Model Market</strong>
+          <small>LLM trading arena</small>
         </span>
-        <span>robinshark</span>
       </NuxtLink>
 
       <nav class="site-nav" aria-label="Primary navigation">
@@ -41,11 +22,15 @@ const navigation = [
           v-for="item in navigation"
           :key="item.to"
           :to="item.to"
-          exact-active-class="is-active"
         >
           {{ item.label }}
         </NuxtLink>
       </nav>
+
+      <div class="nav-state" aria-label="Arena mode">
+        <Icon name="ph:circles-three-plus" aria-hidden="true" />
+        OpenRouter paper
+      </div>
     </div>
   </header>
 </template>

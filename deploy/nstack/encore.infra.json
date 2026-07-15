@@ -36,6 +36,18 @@
     },
     "OpenRouterAPIKey": {
       "$env": "OpenRouterAPIKey"
+    },
+    "RobinhoodCryptoAPIKey": {
+      "$env": "RobinhoodCryptoAPIKey"
+    },
+    "RobinhoodCryptoPrivateKey": {
+      "$env": "RobinhoodCryptoPrivateKey"
+    },
+    "RobinhoodCryptoPublicKey": {
+      "$env": "RobinhoodCryptoPublicKey"
+    },
+    "RobinhoodMCPAccessToken": {
+      "$env": "RobinhoodMCPAccessToken"
     }
   },
   "sql_servers": [

@@ -23,11 +23,11 @@ export default defineNuxtConfig({
       htmlAttrs: {
         lang: "en",
       },
-      title: "robinshark",
-      titleTemplate: "%s · robinshark",
+      title: "Model Market",
+      titleTemplate: "%s | Model Market",
       meta: [
         { name: "viewport", content: "width=device-width, initial-scale=1" },
-        { name: "theme-color", content: "#f3f1eb" },
+        { name: "theme-color", content: "#0a0c0a" },
       ],
     },
     pageTransition: {
@@ -38,9 +38,17 @@ export default defineNuxtConfig({
   fonts: {
     families: [
       {
-        name: "Hanken Grotesk",
+        name: "Instrument Sans",
         provider: "google",
         weights: [400, 500, 600, 700],
+        styles: ["normal"],
+        subsets: ["latin"],
+        global: true,
+      },
+      {
+        name: "IBM Plex Mono",
+        provider: "google",
+        weights: [400, 500, 600],
         styles: ["normal"],
         subsets: ["latin"],
         global: true,

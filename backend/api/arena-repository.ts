@@ -1,0 +1,551 @@
+import { APIError } from "encore.dev/api";
+import { db } from "./db";
+import { openRouterIntegration } from "./openrouter";
+import { robinhoodIntegration } from "./robinhood-mcp";
+import type {
+  ArenaDecision,
+  ArenaDecisionSource,
+  ArenaModel,
+  ArenaOrder,
+  ArenaPosition,
+  ArenaResponse,
+  ArenaStatus,
+  ArenaTrade,
+  BrokerAccountSummary,
+  EquitySeries,
+  MarketQuote,
+} from "./types";
+
+export const ARENA_UNIVERSE = ["AMZN", "META", "MSFT", "NVDA", "SPY", "TSLA"] as const;
+
+export const MARKET_NAMES: Record<(typeof ARENA_UNIVERSE)[number], string> = {
+  AMZN: "Amazon",
+  META: "Meta",
+  MSFT: "Microsoft",
+  NVDA: "NVIDIA",
+  SPY: "S&P 500 ETF",
+  TSLA: "Tesla",
+};
+
+export interface AgentRow {
+  id: string;
+  name: string;
+  provider: string;
+  code: string;
+  strategy: string;
+  thesis: string;
+  accent: string;
+  status: "active" | "paused";
+  openrouter_model: string;
+  initial_balance: string | number;
+  cash_balance: string | number;
+  equity: string | number;
+  realized_pnl: string | number;
+  unrealized_pnl: string | number;
+  win_rate: string | number;
+  max_drawdown_pct: string | number;
+  total_trades: number;
+  winning_trades: number;
+  losing_trades: number;
+  risk_per_trade_pct: string | number;
+  max_position_pct: string | number;
+  min_confidence: string | number;
+  max_daily_loss: string | number;
+  last_decision_at: Date | string | null;
+  open_positions: string | number;
+}
+
+export interface ArenaStateRow {
+  title: string;
+  season: string;
+  round_number: number;
+  status: ArenaStatus;
+  mode: "live";
+  capital_limit: string | number;
+  allocation_per_model: string | number;
+  live_armed: boolean;
+  automation_enabled: boolean;
+  halted: boolean;
+  halt_reason: string | null;
+  round_in_progress: boolean;
+  round_started_at: Date | string | null;
+  broker_buying_power: string | number | null;
+  broker_equity: string | number | null;
+  broker_as_of: Date | string | null;
+  broker_unmanaged_positions: string[];
+  robinhood_oauth_connected: boolean;
+  robinhood_oauth_expires_at: Date | string | null;
+  last_robinhood_sync_at: Date | string | null;
+  robinhood_error: string | null;
+  last_round_at: Date | string;
+  next_round_at: Date | string;
+}
+
+interface MarketRow {
+  symbol: string;
+  name: string;
+  price: string | number;
+  previous_close: string | number;
+  change_pct: string | number;
+  bid: string | number | null;
+  ask: string | number | null;
+  source: "robinhood_mcp";
+  as_of: Date | string;
+  updated_at: Date | string;
+}
+
+interface EquityRow {
+  agent_id: string;
+  agent_name: string;
+  accent: string;
+  initial_balance: string | number;
+  equity: string | number;
+  captured_at: Date | string;
+}
+
+interface PositionRow {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_code: string;
+  agent_accent: string;
+  symbol: string;
+  quantity: string | number;
+  average_entry_price: string | number;
+  current_price: string | number;
+  market_value: string | number;
+  unrealized_pnl: string | number;
+  stop_loss: string | number;
+  take_profit: string | number;
+  opened_at: Date | string;
+}
+
+interface DecisionRow {
+  id: string;
+  round_number: number;
+  agent_id: string;
+  agent_name: string;
+  agent_code: string;
+  agent_accent: string;
+  symbol: string;
+  action: ArenaDecision["action"];
+  requested_action: ArenaDecision["requested_action"] | null;
+  confidence: string | number;
+  rationale: string;
+  requested_allocation_pct: string | number | null;
+  proposed_notional: string | number;
+  executed_notional: string | number;
+  approved: boolean;
+  risk_note: string;
+  source: ArenaDecisionSource;
+  order_id: string | null;
+  provider_model: string | null;
+  provider_request_id: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  latency_ms: number | null;
+  generation_cost: string | number | null;
+  created_at: Date | string;
+}
+
+interface OrderRow {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_code: string;
+  agent_accent: string;
+  symbol: string;
+  side: "buy" | "sell";
+  status: string;
+  requested_amount: string | number;
+  requested_quantity: string | number;
+  filled_quantity: string | number;
+  average_fill_price: string | number | null;
+  broker_order_id: string | null;
+  error_message: string | null;
+  created_at: Date | string;
+  reconciled_at: Date | string | null;
+}
+
+interface TradeRow {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_code: string;
+  agent_accent: string;
+  symbol: string;
+  quantity: string | number;
+  entry_price: string | number;
+  exit_price: string | number | null;
+  realized_pnl: string | number | null;
+  return_pct: string | number | null;
+  status: "open" | "closed";
+  opened_at: Date | string;
+  closed_at: Date | string | null;
+  exit_reason: string | null;
+}
+
+export function numeric(value: string | number | null | undefined): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function timestamp(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+export function rounded(value: number, precision = 4): number {
+  const factor = 10 ** precision;
+  return Math.round(value * factor) / factor;
+}
+
+export async function getArenaState(): Promise<ArenaStateRow> {
+  const row = await db.queryRow<ArenaStateRow>`SELECT * FROM arena_state WHERE id = 1`;
+  if (!row) throw APIError.internal("arena state is missing");
+  return row;
+}
+
+export async function listAgentRows(): Promise<AgentRow[]> {
+  return db.queryAll<AgentRow>`
+    SELECT a.*,
+      (SELECT count(*) FROM arena_positions p
+        WHERE p.agent_id = a.id AND p.status = 'open') AS open_positions
+    FROM arena_agents a
+    ORDER BY a.id
+  `;
+}
+
+export async function listModels(): Promise<ArenaModel[]> {
+  const rows = await listAgentRows();
+  const models = rows.map((row) => {
+    const initial = numeric(row.initial_balance);
+    const equity = numeric(row.equity);
+    return {
+      id: row.id,
+      rank: 0,
+      name: row.name,
+      provider: row.provider,
+      code: row.code,
+      strategy: row.strategy,
+      thesis: row.thesis,
+      accent: row.accent,
+      status: row.status,
+      openrouter_model: row.openrouter_model,
+      initial_balance: initial,
+      cash_balance: numeric(row.cash_balance),
+      equity,
+      realized_pnl: numeric(row.realized_pnl),
+      unrealized_pnl: numeric(row.unrealized_pnl),
+      total_pnl: equity - initial,
+      return_pct: initial === 0 ? 0 : ((equity - initial) / initial) * 100,
+      win_rate: numeric(row.win_rate),
+      max_drawdown_pct: numeric(row.max_drawdown_pct),
+      total_trades: row.total_trades,
+      open_positions: numeric(row.open_positions),
+      risk_per_trade_pct: numeric(row.risk_per_trade_pct),
+      max_position_pct: numeric(row.max_position_pct),
+      min_confidence: numeric(row.min_confidence),
+      max_daily_loss: numeric(row.max_daily_loss),
+      last_decision_at: row.last_decision_at ? timestamp(row.last_decision_at) : undefined,
+    } satisfies ArenaModel;
+  });
+  models.sort((left, right) => right.return_pct - left.return_pct || left.id.localeCompare(right.id));
+  return models.map((model, index) => ({ ...model, rank: index + 1 }));
+}
+
+export async function listMarket(): Promise<MarketQuote[]> {
+  const rows = await db.queryAll<MarketRow>`SELECT * FROM arena_market ORDER BY symbol`;
+  return rows.map((row) => ({
+    symbol: row.symbol,
+    name: row.name,
+    price: numeric(row.price),
+    previous_close: numeric(row.previous_close),
+    change_pct: numeric(row.change_pct),
+    bid: row.bid === null ? undefined : numeric(row.bid),
+    ask: row.ask === null ? undefined : numeric(row.ask),
+    source: row.source,
+    as_of: timestamp(row.as_of),
+    updated_at: timestamp(row.updated_at),
+  }));
+}
+
+export async function listEquitySeries(): Promise<EquitySeries[]> {
+  const rows = await db.queryAll<EquityRow>`
+    SELECT agent_id, agent_name, accent, initial_balance, equity, captured_at
+    FROM (
+      SELECT s.agent_id, a.name AS agent_name, a.accent, a.initial_balance,
+        s.equity, s.captured_at,
+        row_number() OVER (PARTITION BY s.agent_id ORDER BY s.captured_at DESC) AS sequence
+      FROM arena_equity_snapshots s
+      JOIN arena_agents a ON a.id = s.agent_id
+    ) recent
+    WHERE sequence <= 288
+    ORDER BY captured_at, agent_id
+  `;
+  const series = new Map<string, EquitySeries>();
+  for (const row of rows) {
+    const initial = numeric(row.initial_balance);
+    const current = series.get(row.agent_id) || {
+      agent_id: row.agent_id,
+      agent_name: row.agent_name,
+      accent: row.accent,
+      points: [],
+    };
+    const equity = numeric(row.equity);
+    current.points.push({
+      captured_at: timestamp(row.captured_at),
+      equity,
+      return_pct: initial === 0 ? 0 : ((equity - initial) / initial) * 100,
+    });
+    series.set(row.agent_id, current);
+  }
+  return [...series.values()];
+}
+
+export async function listPositions(): Promise<ArenaPosition[]> {
+  const rows = await db.queryAll<PositionRow>`
+    SELECT p.id, p.agent_id, a.name AS agent_name, a.code AS agent_code,
+      a.accent AS agent_accent, p.symbol, p.quantity, p.average_entry_price,
+      p.current_price, p.market_value, p.unrealized_pnl, p.stop_loss,
+      p.take_profit, p.opened_at
+    FROM arena_positions p
+    JOIN arena_agents a ON a.id = p.agent_id
+    WHERE p.status = 'open'
+    ORDER BY abs(p.unrealized_pnl) DESC, p.opened_at DESC
+  `;
+  return rows.map((row) => {
+    const entry = numeric(row.average_entry_price);
+    const current = numeric(row.current_price);
+    return {
+      id: row.id,
+      agent_id: row.agent_id,
+      agent_name: row.agent_name,
+      agent_code: row.agent_code,
+      agent_accent: row.agent_accent,
+      symbol: row.symbol,
+      quantity: numeric(row.quantity),
+      average_entry_price: entry,
+      current_price: current,
+      market_value: numeric(row.market_value),
+      unrealized_pnl: numeric(row.unrealized_pnl),
+      return_pct: entry === 0 ? 0 : ((current - entry) / entry) * 100,
+      stop_loss: numeric(row.stop_loss),
+      take_profit: numeric(row.take_profit),
+      opened_at: timestamp(row.opened_at),
+    };
+  });
+}
+
+export async function listDecisions(): Promise<ArenaDecision[]> {
+  const rows = await db.queryAll<DecisionRow>`
+    SELECT d.*, a.name AS agent_name, a.code AS agent_code,
+      a.accent AS agent_accent
+    FROM arena_decisions d
+    JOIN arena_agents a ON a.id = d.agent_id
+    ORDER BY d.created_at DESC
+    LIMIT 32
+  `;
+  return rows.map((row) => ({
+    id: row.id,
+    round_number: row.round_number,
+    agent_id: row.agent_id,
+    agent_name: row.agent_name,
+    agent_code: row.agent_code,
+    agent_accent: row.agent_accent,
+    symbol: row.symbol,
+    action: row.action,
+    requested_action: row.requested_action || row.action,
+    confidence: numeric(row.confidence),
+    rationale: row.rationale,
+    requested_allocation_pct: numeric(row.requested_allocation_pct),
+    proposed_notional: numeric(row.proposed_notional),
+    executed_notional: numeric(row.executed_notional),
+    approved: row.approved,
+    risk_note: row.risk_note,
+    source: row.source,
+    order_id: row.order_id || undefined,
+    provider_model: row.provider_model || undefined,
+    provider_request_id: row.provider_request_id || undefined,
+    prompt_tokens: row.prompt_tokens ?? undefined,
+    completion_tokens: row.completion_tokens ?? undefined,
+    latency_ms: row.latency_ms ?? undefined,
+    generation_cost: row.generation_cost === null ? undefined : numeric(row.generation_cost),
+    created_at: timestamp(row.created_at),
+  }));
+}
+
+export async function listOrders(): Promise<ArenaOrder[]> {
+  const rows = await db.queryAll<OrderRow>`
+    SELECT o.*, a.name AS agent_name, a.code AS agent_code,
+      a.accent AS agent_accent
+    FROM arena_orders o
+    JOIN arena_agents a ON a.id = o.agent_id
+    ORDER BY o.created_at DESC
+    LIMIT 32
+  `;
+  return rows.map((row) => ({
+    id: row.id,
+    agent_id: row.agent_id,
+    agent_name: row.agent_name,
+    agent_code: row.agent_code,
+    agent_accent: row.agent_accent,
+    symbol: row.symbol,
+    side: row.side,
+    status: row.status,
+    requested_amount: numeric(row.requested_amount),
+    requested_quantity: numeric(row.requested_quantity),
+    filled_quantity: numeric(row.filled_quantity),
+    average_fill_price: row.average_fill_price === null ? undefined : numeric(row.average_fill_price),
+    broker_order_id: row.broker_order_id || undefined,
+    error_message: row.error_message || undefined,
+    created_at: timestamp(row.created_at),
+    reconciled_at: row.reconciled_at ? timestamp(row.reconciled_at) : undefined,
+  }));
+}
+
+export async function listTrades(): Promise<ArenaTrade[]> {
+  const rows = await db.queryAll<TradeRow>`
+    SELECT t.*, a.name AS agent_name, a.code AS agent_code,
+      a.accent AS agent_accent
+    FROM arena_trades t
+    JOIN arena_agents a ON a.id = t.agent_id
+    ORDER BY coalesce(t.closed_at, t.opened_at) DESC
+    LIMIT 32
+  `;
+  return rows.map((row) => ({
+    id: row.id,
+    agent_id: row.agent_id,
+    agent_name: row.agent_name,
+    agent_code: row.agent_code,
+    agent_accent: row.agent_accent,
+    symbol: row.symbol,
+    quantity: numeric(row.quantity),
+    entry_price: numeric(row.entry_price),
+    exit_price: row.exit_price === null ? undefined : numeric(row.exit_price),
+    realized_pnl: row.realized_pnl === null ? undefined : numeric(row.realized_pnl),
+    return_pct: row.return_pct === null ? undefined : numeric(row.return_pct),
+    status: row.status,
+    opened_at: timestamp(row.opened_at),
+    closed_at: row.closed_at ? timestamp(row.closed_at) : undefined,
+    exit_reason: row.exit_reason || undefined,
+  }));
+}
+
+export async function markToMarket(): Promise<void> {
+  await db.exec`
+    UPDATE arena_positions p SET
+      current_price = m.price,
+      market_value = p.quantity * m.price,
+      unrealized_pnl = p.quantity * (m.price - p.average_entry_price),
+      updated_at = now()
+    FROM arena_market m
+    WHERE p.symbol = m.symbol AND p.status = 'open'
+  `;
+  await db.exec`
+    UPDATE arena_agents a SET
+      unrealized_pnl = coalesce((
+        SELECT sum(p.unrealized_pnl) FROM arena_positions p
+        WHERE p.agent_id = a.id AND p.status = 'open'
+      ), 0),
+      equity = a.cash_balance + coalesce((
+        SELECT sum(p.market_value) FROM arena_positions p
+        WHERE p.agent_id = a.id AND p.status = 'open'
+      ), 0),
+      updated_at = now()
+  `;
+}
+
+export async function recordEquitySnapshots(): Promise<void> {
+  await db.exec`
+    INSERT INTO arena_equity_snapshots (agent_id, equity, source)
+    SELECT id, equity, 'robinhood_mcp' FROM arena_agents
+  `;
+  await db.exec`
+    WITH peaks AS (
+      SELECT agent_id, max(equity) AS peak
+      FROM arena_equity_snapshots
+      GROUP BY agent_id
+    )
+    UPDATE arena_agents a SET max_drawdown_pct = greatest(
+      a.max_drawdown_pct,
+      CASE WHEN peaks.peak > 0 THEN ((peaks.peak - a.equity) / peaks.peak) * 100 ELSE 0 END
+    )
+    FROM peaks WHERE peaks.agent_id = a.id
+  `;
+}
+
+export async function storedBrokerSummary(state?: ArenaStateRow): Promise<BrokerAccountSummary | undefined> {
+  const current = state || await getArenaState();
+  if (current.broker_buying_power === null || current.broker_equity === null || !current.broker_as_of) {
+    return undefined;
+  }
+  const exposure = await db.queryRow<{ value: string | number }>`
+    SELECT coalesce(sum(market_value), 0) AS value
+    FROM arena_positions WHERE status = 'open'
+  `;
+  return {
+    buying_power: numeric(current.broker_buying_power),
+    equity: numeric(current.broker_equity),
+    as_of: timestamp(current.broker_as_of),
+    allocated_capital: numeric(current.capital_limit),
+    managed_exposure: numeric(exposure?.value),
+    unmanaged_positions: current.broker_unmanaged_positions || [],
+  };
+}
+
+export async function buildArena(): Promise<ArenaResponse> {
+  const [state, models, market, equitySeries, positions, decisions, orders, trades] = await Promise.all([
+    getArenaState(),
+    listModels(),
+    listMarket(),
+    listEquitySeries(),
+    listPositions(),
+    listDecisions(),
+    listOrders(),
+    listTrades(),
+  ]);
+  const startingCapital = models.reduce((sum, model) => sum + model.initial_balance, 0);
+  const totalEquity = models.reduce((sum, model) => sum + model.equity, 0);
+  const totalPnl = totalEquity - startingCapital;
+  const pendingOrders = orders.filter((order) => !order.reconciled_at).length;
+  return {
+    arena: {
+      title: state.title,
+      season: state.season,
+      round_number: state.round_number,
+      status: state.status,
+      mode: state.mode,
+      capital_limit: numeric(state.capital_limit),
+      allocation_per_model: numeric(state.allocation_per_model),
+      starting_capital: startingCapital,
+      total_equity: totalEquity,
+      total_pnl: totalPnl,
+      return_pct: startingCapital === 0 ? 0 : (totalPnl / startingCapital) * 100,
+      open_positions: positions.length,
+      pending_orders: pendingOrders,
+      executed_trades: trades.filter((trade) => trade.status === "closed").length,
+      live_armed: state.live_armed,
+      automation_enabled: state.automation_enabled,
+      halted: state.halted,
+      last_round_at: timestamp(state.last_round_at),
+      next_round_at: timestamp(state.next_round_at),
+      last_robinhood_sync_at: state.last_robinhood_sync_at
+        ? timestamp(state.last_robinhood_sync_at)
+        : undefined,
+      leader_id: models[0]?.id || "",
+    },
+    models,
+    market,
+    equity_series: equitySeries,
+    positions,
+    decisions,
+    orders,
+    trades,
+    openrouter: openRouterIntegration(),
+    robinhood: robinhoodIntegration(
+      state.robinhood_error || undefined,
+      state.robinhood_oauth_connected,
+    ),
+    generated_at: new Date().toISOString(),
+  };
+}

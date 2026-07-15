@@ -3,6 +3,7 @@ const navigation = [
   { label: "Performance", to: "/#performance" },
   { label: "Models", to: "/#models" },
   { label: "Ledger", to: "/#ledger" },
+  { label: "Admin", to: "/admin" },
 ] as const;
 </script>
 
@@ -10,7 +11,9 @@ const navigation = [
   <header class="site-header">
     <div class="shell header-inner">
       <NuxtLink class="brand" to="/" aria-label="Model Market home">
-        <span class="brand-mark" aria-hidden="true">MM</span>
+        <span class="brand-mark" aria-hidden="true">
+          <img :src="'/brand/model-market-mark.png'" alt="">
+        </span>
         <span class="brand-copy">
           <strong>Model Market</strong>
           <small>LLM trading arena</small>
@@ -28,8 +31,8 @@ const navigation = [
       </nav>
 
       <div class="nav-state" aria-label="Arena mode">
-        <Icon name="ph:circles-three-plus" aria-hidden="true" />
-        OpenRouter paper
+        <Icon name="ph:shield-check" aria-hidden="true" />
+        Robinhood live
       </div>
     </div>
   </header>

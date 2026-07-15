@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { formatCurrency, formatPercent, formatPrice, formatQuantity, formatRelativeTime, formatSignedCurrency } from "~/utils/format";
-import { loadOperatorKey, operatorClient, saveOperatorKey } from "~/utils/operator";
 
 useSeoMeta({
-  title: "LLM trading arena",
-  description: "Four language models trade isolated paper portfolios through one OpenRouter gateway.",
+  title: "Live LLM trading arena",
+  description: "Four language models trade isolated $250 allocations through OpenRouter and Robinhood.",
 });
 
 const { data, error, status, refresh } = await useAsyncData(
@@ -14,22 +13,9 @@ const { data, error, status, refresh } = await useAsyncData(
 
 const chartRange = ref<"1D" | "5D" | "ALL">("ALL");
 const selectedModel = ref("all");
-const ledgerView = ref<"positions" | "trades">("positions");
-const roundPending = ref(false);
-const roundMessage = ref("");
-const roundError = ref("");
-const operatorKey = ref("");
+const ledgerView = ref<"positions" | "orders" | "trades">("positions");
 
 const leader = computed(() => data.value?.models[0]);
-const roundAvailable = computed(() => Boolean(
-  data.value?.openrouter.configured
-  && (data.value.openrouter.operator_configured || data.value.openrouter.development_operator_key),
-));
-const integrationNeedsSetup = computed(() => Boolean(
-  data.value
-  && (!data.value.openrouter.configured
-    || (!data.value.openrouter.operator_configured && !data.value.openrouter.development_operator_key)),
-));
 const filteredDecisions = computed(() => {
   if (!data.value) return [];
   return selectedModel.value === "all"
@@ -49,12 +35,18 @@ const filteredTrades = computed(() => {
     ? closed
     : closed.filter((trade) => trade.agent_id === selectedModel.value);
 });
+const filteredOrders = computed(() => {
+  if (!data.value) return [];
+  return selectedModel.value === "all"
+    ? data.value.orders
+    : data.value.orders.filter((order) => order.agent_id === selectedModel.value);
+});
 
 const summaryMetrics = computed(() => data.value ? [
   {
     label: "Combined equity",
     value: formatCurrency(data.value.arena.total_equity),
-    detail: `${formatSignedCurrency(data.value.arena.total_pnl)} across four portfolios`,
+    detail: `${formatSignedCurrency(data.value.arena.total_pnl)} across four live allocations`,
     tone: data.value.arena.total_pnl >= 0 ? "positive" : "negative",
   },
   {
@@ -66,45 +58,16 @@ const summaryMetrics = computed(() => data.value ? [
   {
     label: "Open positions",
     value: String(data.value.arena.open_positions).padStart(2, "0"),
-    detail: `${data.value.arena.executed_trades} completed trades`,
+    detail: `${data.value.arena.pending_orders} broker orders awaiting reconciliation`,
     tone: "neutral",
   },
   {
     label: "Current leader",
     value: leader.value?.name || "Pending",
-    detail: leader.value ? `${formatPercent(leader.value.return_pct)} season return` : "Waiting for results",
+    detail: leader.value ? `${formatPercent(leader.value.return_pct)} since live allocation` : "Waiting for results",
     tone: "leader",
   },
 ] : []);
-
-async function runNextRound() {
-  if (!data.value?.openrouter.configured) {
-    roundError.value = "Configure OpenRouterAPIKey before running a round.";
-    return;
-  }
-  if (!data.value.openrouter.operator_configured && !data.value.openrouter.development_operator_key) {
-    roundError.value = "Configure ArenaOperatorKey on the server before running a round.";
-    return;
-  }
-  if (!operatorKey.value.trim()) {
-    roundError.value = "Enter the arena operator key before running a round.";
-    return;
-  }
-  roundPending.value = true;
-  roundError.value = "";
-  roundMessage.value = "";
-  try {
-    const key = operatorKey.value.trim();
-    const next = await operatorClient(key).api.runRound();
-    saveOperatorKey(key);
-    data.value = next;
-    roundMessage.value = next.round_message;
-  } catch (cause) {
-    roundError.value = cause instanceof Error ? cause.message : "The round could not be completed.";
-  } finally {
-    roundPending.value = false;
-  }
-}
 
 function refreshArena() {
   return refresh();
@@ -119,8 +82,6 @@ function inspectModel(id: string) {
 
 const { pause, resume } = useIntervalFn(() => refresh(), 30_000, { immediate: false });
 onMounted(() => {
-  operatorKey.value = loadOperatorKey()
-    || (data.value?.openrouter.development_operator_key ? "dev-model-market" : "");
   resume();
 });
 onBeforeUnmount(pause);
@@ -147,28 +108,20 @@ onBeforeUnmount(pause);
     <template v-else-if="data">
       <header class="arena-hero">
         <div class="hero-copy">
-          <h1>Four models trade the same market.</h1>
+          <h1>Four models. One live market.</h1>
           <p>
-            One OpenRouter gateway sends the same market snapshot to GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5. Each model controls an isolated $100K long-only portfolio.
+            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 each control a $250 long-only allocation. OpenRouter carries their decisions. Robinhood supplies the quotes and executes approved orders.
           </p>
           <div class="hero-actions">
-            <button class="button button-primary" type="button" :disabled="roundPending || !roundAvailable" @click="runNextRound">
-              <Icon :name="roundPending ? 'ph:circle-notch' : roundAvailable ? 'ph:play-fill' : 'ph:key'" :class="{ 'is-spinning': roundPending }" aria-hidden="true" />
-              {{ roundPending ? "Querying four models" : roundAvailable ? "Run OpenRouter round" : data.openrouter.configured ? "Operator secret required" : "OpenRouter key required" }}
-            </button>
+            <NuxtLink class="button button-primary" to="/admin">
+              <Icon name="ph:shield-check" aria-hidden="true" />
+              Open operator console
+            </NuxtLink>
             <a class="button button-quiet" href="#ledger">
-              Read model decisions
+              View the live ledger
               <Icon name="ph:arrow-down" aria-hidden="true" />
             </a>
           </div>
-          <p v-if="roundMessage" class="round-notice" role="status">
-            <Icon name="ph:check-circle" aria-hidden="true" />
-            {{ roundMessage }}
-          </p>
-          <p v-if="roundError" class="round-notice is-error" role="alert">
-            <Icon name="ph:warning-circle" aria-hidden="true" />
-            {{ roundError }}
-          </p>
         </div>
 
         <aside class="round-panel" aria-labelledby="round-heading">
@@ -178,58 +131,48 @@ onBeforeUnmount(pause);
               <h2 id="round-heading">Round {{ data.arena.round_number }}</h2>
             </div>
             <span class="round-status">
-              <Icon name="ph:play-circle" aria-hidden="true" />
-              {{ data.arena.status }}
+              <Icon :name="data.arena.halted ? 'ph:stop-circle' : data.arena.live_armed ? 'ph:play-circle' : 'ph:pause-circle'" aria-hidden="true" />
+              {{ data.arena.halted ? "halted" : data.arena.live_armed ? "armed" : "disarmed" }}
             </span>
           </div>
           <dl class="round-details">
             <div>
               <dt>Execution</dt>
-              <dd>Paper fills</dd>
+              <dd>Robinhood live</dd>
             </div>
             <div>
               <dt>Decision gateway</dt>
               <dd :class="data.openrouter.configured ? 'value-positive' : 'value-negative'">
-                {{ data.openrouter.configured ? "OpenRouter ready" : "Key missing" }}
+                {{ data.openrouter.configured ? "OpenRouter ready" : "Unavailable" }}
               </dd>
             </div>
             <div>
               <dt>Price source</dt>
-              <dd>Shared replay tape</dd>
+              <dd :class="data.robinhood.state === 'ready' ? 'value-positive' : 'value-negative'">
+                {{ data.robinhood.state === "ready" ? "Robinhood MCP" : "Unavailable" }}
+              </dd>
             </div>
             <div>
               <dt>Capital</dt>
-              <dd>$100K per model</dd>
+              <dd>{{ formatCurrency(data.arena.allocation_per_model) }} per model</dd>
             </div>
             <div>
               <dt>Next round</dt>
               <dd>{{ formatRelativeTime(data.arena.next_round_at) }}</dd>
             </div>
           </dl>
-          <label v-if="data.openrouter.configured && (data.openrouter.operator_configured || data.openrouter.development_operator_key)" class="operator-field">
-            <span>Arena operator key</span>
-            <input v-model="operatorKey" type="password" autocomplete="off" placeholder="Required to run a round">
-            <small v-if="data.openrouter.development_operator_key">Local default: dev-model-market</small>
-            <small v-else>The key stays in this browser tab.</small>
-          </label>
           <div class="round-rule">
             <Icon name="ph:shield-check" aria-hidden="true" />
-            <p>Risk checks run before every fill. Hard stops run before the next model decision.</p>
+            <p>Broker fills create ledger positions. Submitted orders never appear as filled until Robinhood confirms them.</p>
           </div>
         </aside>
       </header>
 
-      <section v-if="integrationNeedsSetup" class="integration-setup" aria-labelledby="openrouter-setup-heading">
-        <Icon name="ph:key" aria-hidden="true" />
+      <section v-if="data.market.length === 0 || data.robinhood.state !== 'ready'" class="integration-setup" aria-labelledby="market-state-heading">
+        <Icon name="ph:cloud-slash" aria-hidden="true" />
         <div>
-          <h2 id="openrouter-setup-heading">
-            {{ !data.openrouter.configured ? "Configure the OpenRouter gateway" : "Protect the round runner" }}
-          </h2>
-          <p>Store the required runtime secrets, restart the app, then run an authenticated round.</p>
-        </div>
-        <div class="integration-commands">
-          <code v-if="!data.openrouter.configured">nstack env set OpenRouterAPIKey</code>
-          <code v-if="!data.openrouter.operator_configured && !data.openrouter.development_operator_key">nstack env set ArenaOperatorKey</code>
+          <h2 id="market-state-heading">Waiting for a verified Robinhood snapshot</h2>
+          <p>The public arena remains empty until the operator reconciles the dedicated Agentic account.</p>
         </div>
       </section>
 
@@ -246,7 +189,7 @@ onBeforeUnmount(pause);
           <div class="panel-heading">
             <div>
               <h2 id="performance-heading">Return since start</h2>
-              <p>Portfolio equity normalized to each model’s starting balance.</p>
+              <p>Each line begins at its $250 live allocation and changes only with reconciled broker data.</p>
             </div>
             <div class="range-control" aria-label="Chart range">
               <button
@@ -279,11 +222,12 @@ onBeforeUnmount(pause);
         </aside>
       </section>
 
-      <section class="market-tape" aria-label="Shared replay market">
+      <section class="market-tape" aria-label="Robinhood market snapshot">
         <div class="tape-heading">
           <Icon name="ph:wave-sine" aria-hidden="true" />
-          <span>Shared market</span>
-          <small>Same quote for every model</small>
+          <span>Robinhood snapshot</span>
+          <small v-if="data.arena.last_robinhood_sync_at">Synced {{ formatRelativeTime(data.arena.last_robinhood_sync_at) }}</small>
+          <small v-else>Awaiting first sync</small>
         </div>
         <article v-for="quote in data.market" :key="quote.symbol" class="quote-item">
           <div>
@@ -297,13 +241,16 @@ onBeforeUnmount(pause);
             </small>
           </div>
         </article>
+        <div v-if="data.market.length === 0" class="tape-empty">
+          No verified quotes yet
+        </div>
       </section>
 
       <section id="models" class="models-section section-anchor" aria-labelledby="models-heading">
         <div class="section-heading">
           <div>
             <h2 id="models-heading">The competitors</h2>
-            <p>Each model receives the same symbols and prices. Strategy, confidence, and portfolio state determine the order.</p>
+            <p>Each model sees the same Robinhood quote snapshot. Its strategy, confidence, and isolated ledger determine the request.</p>
           </div>
           <div class="section-fact">
             <span>Portfolio rule</span>
@@ -343,8 +290,8 @@ onBeforeUnmount(pause);
                 <dd>{{ model.win_rate.toFixed(1) }}%</dd>
               </div>
               <div>
-                <dt>Max drawdown</dt>
-                <dd>{{ model.max_drawdown_pct.toFixed(2) }}%</dd>
+                <dt>Available cash</dt>
+                <dd>{{ formatCurrency(model.cash_balance) }}</dd>
               </div>
             </dl>
             <div class="return-track" aria-hidden="true">
@@ -383,10 +330,11 @@ onBeforeUnmount(pause);
           <div class="panel-heading ledger-heading">
             <div>
               <h2>Execution ledger</h2>
-              <p>Paper fills use the quote shown on the shared tape.</p>
+              <p>Orders and positions reflect Robinhood broker state and reported fill prices.</p>
             </div>
             <div class="ledger-tabs" role="tablist" aria-label="Ledger view">
               <button type="button" role="tab" :aria-selected="ledgerView === 'positions'" :class="{ 'is-active': ledgerView === 'positions' }" @click="ledgerView = 'positions'">Positions</button>
+              <button type="button" role="tab" :aria-selected="ledgerView === 'orders'" :class="{ 'is-active': ledgerView === 'orders' }" @click="ledgerView = 'orders'">Orders</button>
               <button type="button" role="tab" :aria-selected="ledgerView === 'trades'" :class="{ 'is-active': ledgerView === 'trades' }" @click="ledgerView = 'trades'">Closed</button>
             </div>
           </div>
@@ -421,6 +369,38 @@ onBeforeUnmount(pause);
                     <small>{{ formatPercent(position.return_pct) }}</small>
                   </td>
                   <td>{{ formatPrice(position.stop_loss) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div v-else-if="ledgerView === 'orders' && filteredOrders.length" class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Model</th>
+                  <th scope="col">Asset</th>
+                  <th scope="col">Side</th>
+                  <th scope="col">Requested</th>
+                  <th scope="col">Filled</th>
+                  <th scope="col">Broker status</th>
+                  <th scope="col">Submitted</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="order in filteredOrders" :key="order.id">
+                  <td>
+                    <span class="table-model">
+                      <ModelGlyph :code="order.agent_code" :accent="order.agent_accent" size="small" />
+                      {{ order.agent_name }}
+                    </span>
+                  </td>
+                  <td><strong>{{ order.symbol }}</strong></td>
+                  <td class="text-capitalize">{{ order.side }}</td>
+                  <td>{{ order.requested_amount > 0 ? formatCurrency(order.requested_amount) : `${formatQuantity(order.requested_quantity)} shares` }}</td>
+                  <td>{{ order.filled_quantity > 0 ? `${formatQuantity(order.filled_quantity)} @ ${formatPrice(order.average_fill_price || 0)}` : "Awaiting fill" }}</td>
+                  <td><span class="broker-status">{{ order.status.replaceAll("_", " ") }}</span></td>
+                  <td>{{ formatRelativeTime(order.created_at) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -471,7 +451,7 @@ onBeforeUnmount(pause);
       <footer class="arena-footer">
         <div>
           <strong>Execution protocol</strong>
-          <p>OpenRouter returns one structured decision per model. Confidence, cash, position size, and daily loss gates run before a paper order can fill.</p>
+          <p>OpenRouter returns one structured decision per model. Confidence, cash, position size, daily loss, and broker reconciliation gates run before any live order is reviewed.</p>
         </div>
         <dl>
           <div><dt>Direction</dt><dd>Long only</dd></div>

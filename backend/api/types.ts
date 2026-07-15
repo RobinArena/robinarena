@@ -1,6 +1,6 @@
 export type ArenaAction = "buy" | "sell" | "hold" | "skip";
 export type ArenaStatus = "running" | "paused";
-export type ArenaDecisionSource = "seed" | "openrouter" | "risk_engine";
+export type ArenaDecisionSource = "openrouter" | "risk_engine";
 
 export interface ArenaModel {
   id: string;
@@ -37,6 +37,10 @@ export interface MarketQuote {
   price: number;
   previous_close: number;
   change_pct: number;
+  bid?: number;
+  ask?: number;
+  source: "robinhood_mcp";
+  as_of: string;
   updated_at: string;
 }
 
@@ -89,6 +93,7 @@ export interface ArenaDecision {
   approved: boolean;
   risk_note: string;
   source: ArenaDecisionSource;
+  order_id?: string;
   provider_model?: string;
   provider_request_id?: string;
   prompt_tokens?: number;
@@ -96,6 +101,25 @@ export interface ArenaDecision {
   latency_ms?: number;
   generation_cost?: number;
   created_at: string;
+}
+
+export interface ArenaOrder {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_code: string;
+  agent_accent: string;
+  symbol: string;
+  side: "buy" | "sell";
+  status: string;
+  requested_amount: number;
+  requested_quantity: number;
+  filled_quantity: number;
+  average_fill_price?: number;
+  broker_order_id?: string;
+  error_message?: string;
+  created_at: string;
+  reconciled_at?: string;
 }
 
 export interface ArenaTrade {
@@ -121,15 +145,22 @@ export interface ArenaSummary {
   season: string;
   round_number: number;
   status: ArenaStatus;
-  mode: "openrouter";
+  mode: "live";
+  capital_limit: number;
+  allocation_per_model: number;
   starting_capital: number;
   total_equity: number;
   total_pnl: number;
   return_pct: number;
   open_positions: number;
+  pending_orders: number;
   executed_trades: number;
+  live_armed: boolean;
+  automation_enabled: boolean;
+  halted: boolean;
   last_round_at: string;
   next_round_at: string;
+  last_robinhood_sync_at?: string;
   leader_id: string;
 }
 
@@ -149,11 +180,23 @@ export interface OpenRouterIntegration {
   models: OpenRouterModelStatus[];
 }
 
+export interface RobinhoodIntegration {
+  configured: boolean;
+  state: "ready" | "missing_token" | "error";
+  gateway: "Robinhood Trading MCP";
+  scope: string;
+  documentation_url: string;
+  authentication: "oauth" | "static_token" | "missing";
+  oauth_connected: boolean;
+  last_error?: string;
+}
+
 export interface ModelRoundResult {
   agent_id: string;
   model: string;
   status: "completed" | "failed" | "skipped";
   action?: ArenaAction;
+  order_id?: string;
   message: string;
 }
 
@@ -164,12 +207,47 @@ export interface ArenaResponse {
   equity_series: EquitySeries[];
   positions: ArenaPosition[];
   decisions: ArenaDecision[];
+  orders: ArenaOrder[];
   trades: ArenaTrade[];
   openrouter: OpenRouterIntegration;
+  robinhood: RobinhoodIntegration;
   generated_at: string;
 }
 
 export interface RunRoundResponse extends ArenaResponse {
   round_message: string;
   round_results: ModelRoundResult[];
+}
+
+export interface BrokerAccountSummary {
+  buying_power: number;
+  equity: number;
+  as_of: string;
+  allocated_capital: number;
+  managed_exposure: number;
+  unmanaged_positions: string[];
+}
+
+export interface AdminStatusResponse {
+  authenticated: true;
+  arena: ArenaResponse;
+  broker?: BrokerAccountSummary;
+  robinhood_oauth: {
+    connected: boolean;
+    expires_at?: string;
+    started_at?: string;
+  };
+  execution_confirmation: string;
+  live_consent_confirmation: string;
+  flatten_confirmation: string;
+}
+
+export interface RobinhoodConnectResponse {
+  authorization_url: string;
+}
+
+export interface AdminControlResponse {
+  ok: boolean;
+  message: string;
+  status: AdminStatusResponse;
 }

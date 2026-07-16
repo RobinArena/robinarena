@@ -134,14 +134,16 @@ const mcp = createServer(async (request, response) => {
     payload = { accounts: [{ account_number: "AGENTIC-TEST", account_type: "Agentic", agentic_allowed: true }] };
   } else if (name === "get_portfolio") {
     payload = {
-      accounts: [{
-        account_number: "AGENTIC-TEST",
-        account_type: "Agentic",
-        agentic_allowed: true,
-        total_value: 1000,
-        buying_power: cashBalance(),
-        as_of: new Date().toISOString(),
-      }],
+      data: {
+        total_value: "1000",
+        cash: String(cashBalance()),
+        buying_power: {
+          buying_power: String(cashBalance()),
+          unleveraged_buying_power: String(cashBalance()),
+          display_currency: "USD",
+        },
+      },
+      guide: "Test portfolio response",
     };
   } else if (name === "get_equity_quotes") {
     payload = {
@@ -156,21 +158,13 @@ const mcp = createServer(async (request, response) => {
     };
   } else if (name === "get_equity_positions") {
     payload = {
-      accounts: [{
-        account_number: "AGENTIC-TEST",
-        account_type: "Agentic",
-        agentic_allowed: true,
-        positions: openPositions(),
-      }],
+      data: { positions: openPositions() },
+      guide: "Test positions response",
     };
   } else if (name === "get_equity_orders") {
     payload = {
-      accounts: [{
-        account_number: "AGENTIC-TEST",
-        account_type: "Agentic",
-        agentic_allowed: true,
-        orders,
-      }],
+      data: { orders },
+      guide: "Test orders response",
     };
   } else if (name === "get_equity_tradability") {
     payload = { instruments: (args.symbols || [args.symbol]).map((symbol) => ({ symbol, tradable: true, fractionable: true })) };

@@ -206,7 +206,7 @@ export class RobinhoodMcpClient {
       params: {
         protocolVersion: MCP_PROTOCOL,
         capabilities: {},
-        clientInfo: { name: "model-market", version: "0.4.1" },
+        clientInfo: { name: "model-market", version: "0.4.2" },
       },
     });
     await this.post(
@@ -306,7 +306,11 @@ export class RobinhoodMcpClient {
     const payload = await this.callTool("get_portfolio", {
       account_number: agenticAccount.accountNumber,
     });
-    const items = contextualRecords(payload)
+    const items = contextualRecords(payload, {
+      accountId: agenticAccount.accountNumber,
+      accountType: "Agentic",
+      agentic: true,
+    })
       .filter((item) => this.accountAllowed(item, agenticAccount.ids));
     const accountIds = new Set(items.map((item) => item.accountId || "agentic").filter(Boolean));
     for (const accountId of accountIds) {
@@ -335,7 +339,11 @@ export class RobinhoodMcpClient {
       account_number: agenticAccount.accountNumber,
     });
     const positions = new Map<string, RobinhoodPositionSnapshot>();
-    for (const item of contextualRecords(payload)) {
+    for (const item of contextualRecords(payload, {
+      accountId: agenticAccount.accountNumber,
+      accountType: "Agentic",
+      agentic: true,
+    })) {
       if (!this.accountAllowed(item, agenticAccount.ids)) continue;
       const symbol = stringField(item.record, ["symbol", "ticker", "instrument_symbol"])?.toUpperCase();
       const quantity = numberField(item.record, ["quantity", "shares", "total_quantity"]);
@@ -358,7 +366,11 @@ export class RobinhoodMcpClient {
       account_number: agenticAccount.accountNumber,
     });
     const orders = new Map<string, RobinhoodOrderSnapshot>();
-    for (const item of contextualRecords(payload)) {
+    for (const item of contextualRecords(payload, {
+      accountId: agenticAccount.accountNumber,
+      accountType: "Agentic",
+      agentic: true,
+    })) {
       if (!this.accountAllowed(item, agenticAccount.ids)) continue;
       const record = item.record;
       const id = stringField(record, ["order_id", "id"]);

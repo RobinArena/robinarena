@@ -25,6 +25,11 @@ interface ContextualRecord {
   agentic?: boolean;
 }
 
+interface AgenticAccount {
+  accountNumber: string;
+  ids: Set<string>;
+}
+
 export interface RobinhoodQuote {
   symbol: string;
   price: number;
@@ -165,7 +170,7 @@ function toolPayload(result: unknown): Record<string, unknown> {
 }
 
 export class RobinhoodMcpClient {
-  private agenticAccountPromise?: Promise<Set<string>>;
+  private agenticAccountPromise?: Promise<AgenticAccount>;
 
   private headers(accessToken: string, sessionId?: string): Record<string, string> {
     return {
@@ -201,7 +206,7 @@ export class RobinhoodMcpClient {
       params: {
         protocolVersion: MCP_PROTOCOL,
         capabilities: {},
-        clientInfo: { name: "model-market", version: "0.4.0" },
+        clientInfo: { name: "model-market", version: "0.4.1" },
       },
     });
     await this.post(
@@ -233,7 +238,7 @@ export class RobinhoodMcpClient {
     return payloadRecord(response.body.result);
   }
 
-  private agenticAccountIds(): Promise<Set<string>> {
+  private agenticAccount(): Promise<AgenticAccount> {
     if (!this.agenticAccountPromise) {
       this.agenticAccountPromise = this.callTool("get_accounts", {}).then((payload) => {
         const ids = new Set<string>();
@@ -246,7 +251,10 @@ export class RobinhoodMcpClient {
         if (ids.size === 0) {
           throw new Error("Robinhood MCP did not identify a dedicated Agentic account");
         }
-        return ids;
+        if (ids.size > 1) {
+          throw new Error("Robinhood MCP returned multiple dedicated Agentic accounts");
+        }
+        return { accountNumber: [...ids][0], ids };
       });
     }
     return this.agenticAccountPromise;
@@ -294,11 +302,12 @@ export class RobinhoodMcpClient {
   }
 
   async getAccountSnapshot(): Promise<RobinhoodAccountSnapshot> {
-    const [payload, agenticIds] = await Promise.all([
-      this.callTool("get_portfolio", {}),
-      this.agenticAccountIds(),
-    ]);
-    const items = contextualRecords(payload).filter((item) => this.accountAllowed(item, agenticIds));
+    const agenticAccount = await this.agenticAccount();
+    const payload = await this.callTool("get_portfolio", {
+      account_number: agenticAccount.accountNumber,
+    });
+    const items = contextualRecords(payload)
+      .filter((item) => this.accountAllowed(item, agenticAccount.ids));
     const accountIds = new Set(items.map((item) => item.accountId || "agentic").filter(Boolean));
     for (const accountId of accountIds) {
       const records = items
@@ -321,13 +330,13 @@ export class RobinhoodMcpClient {
   }
 
   async getPositions(): Promise<RobinhoodPositionSnapshot[]> {
-    const [payload, agenticIds] = await Promise.all([
-      this.callTool("get_equity_positions", {}),
-      this.agenticAccountIds(),
-    ]);
+    const agenticAccount = await this.agenticAccount();
+    const payload = await this.callTool("get_equity_positions", {
+      account_number: agenticAccount.accountNumber,
+    });
     const positions = new Map<string, RobinhoodPositionSnapshot>();
     for (const item of contextualRecords(payload)) {
-      if (!this.accountAllowed(item, agenticIds)) continue;
+      if (!this.accountAllowed(item, agenticAccount.ids)) continue;
       const symbol = stringField(item.record, ["symbol", "ticker", "instrument_symbol"])?.toUpperCase();
       const quantity = numberField(item.record, ["quantity", "shares", "total_quantity"]);
       if (!symbol || !quantity || quantity <= 0) continue;
@@ -344,13 +353,13 @@ export class RobinhoodMcpClient {
   }
 
   async getOrders(): Promise<RobinhoodOrderSnapshot[]> {
-    const [payload, agenticIds] = await Promise.all([
-      this.callTool("get_equity_orders", {}),
-      this.agenticAccountIds(),
-    ]);
+    const agenticAccount = await this.agenticAccount();
+    const payload = await this.callTool("get_equity_orders", {
+      account_number: agenticAccount.accountNumber,
+    });
     const orders = new Map<string, RobinhoodOrderSnapshot>();
     for (const item of contextualRecords(payload)) {
-      if (!this.accountAllowed(item, agenticIds)) continue;
+      if (!this.accountAllowed(item, agenticAccount.ids)) continue;
       const record = item.record;
       const id = stringField(record, ["order_id", "id"]);
       const symbol = stringField(record, ["symbol", "ticker", "instrument_symbol"])?.toUpperCase();
@@ -374,15 +383,23 @@ export class RobinhoodMcpClient {
   }
 
   async placeOrder(order: RobinhoodOrderRequest): Promise<RobinhoodOrderResult> {
+    if ((order.amount === undefined) === (order.quantity === undefined)) {
+      throw new Error("Robinhood equity orders require either an amount or a quantity");
+    }
+    const agenticAccount = await this.agenticAccount();
     const args: Record<string, unknown> = {
+      account_number: agenticAccount.accountNumber,
       symbol: order.symbol,
       side: order.side,
-      order_type: "market",
+      type: "market",
       time_in_force: "gfd",
-      ...(order.amount !== undefined ? { amount: order.amount } : {}),
-      ...(order.quantity !== undefined ? { quantity: order.quantity } : {}),
+      ...(order.amount !== undefined ? { dollar_amount: String(order.amount) } : {}),
+      ...(order.quantity !== undefined ? { quantity: String(order.quantity) } : {}),
     };
-    await this.callTool("get_equity_tradability", { symbols: [order.symbol] });
+    await this.callTool("get_equity_tradability", {
+      account_number: agenticAccount.accountNumber,
+      symbols: [order.symbol],
+    });
     const review = await this.callTool("review_equity_order", args);
     const payload = await this.callTool("place_equity_order", args);
     const brokerOrderId = collectRecords(payload)
@@ -395,13 +412,19 @@ export class RobinhoodMcpClient {
   }
 
   async cancelOpenOrders(): Promise<number> {
-    const orders = await this.getOrders();
+    const [orders, agenticAccount] = await Promise.all([
+      this.getOrders(),
+      this.agenticAccount(),
+    ]);
     const openStates = new Set(["open", "queued", "pending", "confirmed", "partially_filled", "working", "submitted"]);
     const ids = orders
       .filter((order) => openStates.has(order.status))
       .map((order) => order.broker_order_id);
     for (const id of [...new Set(ids)]) {
-      await this.callTool("cancel_equity_order", { order_id: id });
+      await this.callTool("cancel_equity_order", {
+        account_number: agenticAccount.accountNumber,
+        order_id: id,
+      });
     }
     return new Set(ids).size;
   }

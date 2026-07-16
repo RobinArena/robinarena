@@ -17,6 +17,15 @@ const modelSymbols = {
 const orders = [];
 const toolCalls = new Map();
 const mcpAuthorizationHeaders = new Set();
+const accountScopedTools = new Set([
+  "cancel_equity_order",
+  "get_equity_orders",
+  "get_equity_positions",
+  "get_equity_tradability",
+  "get_portfolio",
+  "place_equity_order",
+  "review_equity_order",
+]);
 let openRouterInFlight = 0;
 let maxOpenRouterInFlight = 0;
 let openRouterRequests = 0;
@@ -64,6 +73,17 @@ async function body(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
 }
 
+function mcpToolError(response, envelope, message) {
+  json(response, {
+    jsonrpc: "2.0",
+    id: envelope.id,
+    result: {
+      isError: true,
+      content: [{ type: "text", text: message }],
+    },
+  }, { "mcp-session-id": "model-market-test" });
+}
+
 const mcp = createServer(async (request, response) => {
   mcpAuthorizationHeaders.add(request.headers.authorization || "");
   if (request.headers.authorization !== "Bearer refreshed-oauth-access") {
@@ -88,6 +108,27 @@ const mcp = createServer(async (request, response) => {
   const name = envelope.params?.name;
   const args = envelope.params?.arguments || {};
   toolCalls.set(name, (toolCalls.get(name) || 0) + 1);
+  if (accountScopedTools.has(name) && args.account_number !== "AGENTIC-TEST") {
+    mcpToolError(response, envelope, `${name} requires the Agentic account_number`);
+    return;
+  }
+  if ((name === "review_equity_order" || name === "place_equity_order")
+    && (args.type !== "market" || "order_type" in args)) {
+    mcpToolError(response, envelope, `${name} requires type=market`);
+    return;
+  }
+  if ((name === "review_equity_order" || name === "place_equity_order")
+    && args.side === "buy"
+    && (typeof args.dollar_amount !== "string" || "amount" in args)) {
+    mcpToolError(response, envelope, `${name} requires dollar_amount as a string for buys`);
+    return;
+  }
+  if ((name === "review_equity_order" || name === "place_equity_order")
+    && args.side === "sell"
+    && typeof args.quantity !== "string") {
+    mcpToolError(response, envelope, `${name} requires quantity as a string for sells`);
+    return;
+  }
   let payload;
   if (name === "get_accounts") {
     payload = { accounts: [{ account_number: "AGENTIC-TEST", account_type: "Agentic", agentic_allowed: true }] };
@@ -137,13 +178,13 @@ const mcp = createServer(async (request, response) => {
     payload = { review: { status: "approved", symbol: args.symbol, side: args.side } };
   } else if (name === "place_equity_order") {
     const price = prices[args.symbol];
-    const quantity = args.amount ? args.amount / price : args.quantity;
+    const quantity = args.dollar_amount ? Number(args.dollar_amount) / price : Number(args.quantity);
     const order = {
       order_id: `broker-${orders.length + 1}`,
       symbol: args.symbol,
       side: args.side,
       status: "filled",
-      amount: args.amount,
+      dollar_amount: args.dollar_amount,
       quantity,
       filled_quantity: quantity,
       average_fill_price: price,

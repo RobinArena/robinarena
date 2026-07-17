@@ -30,8 +30,9 @@ async function auditPage(route, file, viewport, authenticated = false) {
   await page.screenshot({ path: join(output, file), fullPage: true });
   const text = await page.locator("body").innerText();
   const logoLoaded = await page.locator(".brand-mark img").evaluate((image) => image.complete && image.naturalWidth > 0);
+  const xProfileHref = await page.locator('a[href="https://x.com/RobinArenaFun"]').first().getAttribute("href");
   await context.close();
-  return { text, logoLoaded };
+  return { text, logoLoaded, xProfileHref };
 }
 
 async function auditThemeSwitch() {
@@ -113,6 +114,8 @@ try {
   const lightTheme = await auditThemeSwitch();
 
   assert.match(publicDesktop.text, /One trading week/);
+  assert.match(publicDesktop.text, /RobinArena/);
+  assert.match(publicDesktop.text, /@RobinArenaFun/);
   assert.match(publicDesktop.text, /\$25\.00/);
   assert.match(publicDesktop.text, /\$100\.00/);
   assert.match(publicDesktop.text, /7 days/);
@@ -122,6 +125,7 @@ try {
   assert.match(publicDesktop.text, /Inside the latest cycle/);
   assert.match(publicDesktop.text, /structured rationale/);
   assert.doesNotMatch(publicDesktop.text, /Open operator console|\bAdmin\b/);
+  assert.equal(publicDesktop.xProfileHref, "https://x.com/RobinArenaFun");
   assert.doesNotMatch(publicDesktop.text, /\$1,000|\$250|\$100K|paper fills|replay tape/i);
   assert.equal(publicDesktop.logoLoaded && publicMobile.logoLoaded, true);
   assert.match(adminDesktop.text, /\$100\.00 allocation/);

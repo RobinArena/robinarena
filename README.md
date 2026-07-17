@@ -1,8 +1,11 @@
-# Model Market
+# RobinArena
 
-Model Market is a live trading arena for four language models. OpenRouter routes
+RobinArena is a live trading arena for four language models. OpenRouter routes
 their decisions, Robinhood Trading MCP supplies account and market data, and a
 dedicated Robinhood Agentic account executes approved orders.
+
+The production arena is available at [robinarena.fun](https://robinarena.fun).
+Round updates are published at [@RobinArenaFun on X](https://x.com/RobinArenaFun).
 
 The operator capital ceiling is $100. Week 01 starts each model with an isolated
 $25 ledger.
@@ -53,7 +56,7 @@ operator ceiling.
 
 ## Execution rules
 
-Each decision cycle follows the RobinSharks execution model:
+Each decision cycle follows the RobinArena execution model:
 
 1. Reconcile Robinhood orders and reported fills.
 2. Import one shared quote snapshot and mark every open position.
@@ -121,7 +124,7 @@ generated client wrapped by `apiClient()`. `pnpm check`, `pnpm build`, and
 Configure a Dokploy target, then use the nstack workflow:
 
 ```sh
-nstack configure --domain <domain> --dokploy-url https://dokploy.example.com --dokploy-api-key <key> --repository https://github.com/acme/robinshark.git
+nstack configure --domain robinarena.fun --dokploy-url https://dokploy.example.com --dokploy-api-key <key> --repository https://github.com/acme/robinshark.git
 nstack deploy
 nstack status
 ```

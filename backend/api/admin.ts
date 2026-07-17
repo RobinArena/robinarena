@@ -192,7 +192,7 @@ export const scheduledArenaRound = api(
 );
 
 const _arenaSchedule = new CronJob("model-market-live-round", {
-  title: "Monitor and run the weekly Model Market arena",
+  title: "Monitor and run the weekly RobinArena competition",
   every: "5m",
   endpoint: scheduledArenaRound,
 });

@@ -214,6 +214,39 @@ a {
   gap: 0.85rem;
 }
 
+.x-profile-link {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding-inline: 0.8rem;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-small);
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.x-profile-link:hover {
+  border-color: var(--color-accent-hover);
+  background: var(--color-accent-hover);
+  transform: translateY(-1px);
+}
+
+.x-profile-link:active {
+  transform: translateY(1px);
+}
+
+.x-profile-link svg {
+  flex: 0 0 auto;
+  font-size: 1rem;
+}
+
 .nav-state {
   display: inline-flex;
   align-items: center;
@@ -350,6 +383,17 @@ a {
 .button-quiet:hover {
   border-color: var(--color-muted);
   background: var(--color-surface-raised);
+}
+
+.button-social {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-background);
+}
+
+.button-social:hover {
+  border-color: var(--color-muted);
+  background: var(--color-muted);
 }
 
 .round-notice {
@@ -2003,6 +2047,19 @@ a {
 
   .brand-copy small,
   .nav-state {
+    display: none;
+  }
+
+  .header-tools {
+    gap: 0.45rem;
+  }
+
+  .x-profile-link {
+    width: 2.75rem;
+    padding: 0;
+  }
+
+  .x-profile-link span {
     display: none;
   }
 

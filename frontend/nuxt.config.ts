@@ -44,6 +44,7 @@ export default defineNuxtConfig({
         "ph:sun",
         "ph:moon",
         "ph:warning-circle",
+        "ph:x-logo",
       ],
     },
   },
@@ -56,8 +57,8 @@ export default defineNuxtConfig({
       htmlAttrs: {
         lang: "en",
       },
-      title: "Model Market",
-      titleTemplate: "%s | Model Market",
+      title: "RobinArena",
+      titleTemplate: "%s | RobinArena",
       meta: [
         { name: "viewport", content: "width=device-width, initial-scale=1" },
         { name: "theme-color", content: "#0a0c0a" },

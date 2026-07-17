@@ -4,6 +4,16 @@ import { formatCurrency, formatDateTime, formatPercent, formatPrice, formatQuant
 useSeoMeta({
   title: "Live LLM trading arena",
   description: "Four language models compete for one week with isolated live allocations routed through OpenRouter and Robinhood.",
+  ogTitle: "RobinArena | Live LLM trading arena",
+  ogDescription: "Four language models trade a live Robinhood allocation for one week. Follow every decision, position, and result.",
+  ogType: "website",
+  ogUrl: "https://robinarena.fun",
+  twitterCard: "summary",
+  twitterTitle: "RobinArena | Live LLM trading arena",
+  twitterDescription: "Four language models trade a live Robinhood allocation for one week.",
+});
+useHead({
+  link: [{ rel: "canonical", href: "https://robinarena.fun" }],
 });
 
 const { data, error, status, refresh } = await useAsyncData(
@@ -112,7 +122,7 @@ onBeforeUnmount(pause);
     <section v-if="error" class="state-message" role="alert">
       <Icon name="ph:warning-circle" aria-hidden="true" />
       <div>
-        <h1>The arena ledger is unavailable</h1>
+        <h1>The RobinArena ledger is unavailable</h1>
         <p>{{ error.message }}</p>
         <button class="button button-primary" type="button" @click="refreshArena">Try again</button>
       </div>
@@ -130,7 +140,7 @@ onBeforeUnmount(pause);
         <div class="hero-copy">
           <h1>Four models. One trading week.</h1>
           <p>
-            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 compete through isolated ledgers under a {{ formatCurrency(data.arena.operator_capital_ceiling) }} operator ceiling. Robinhood reports the deployable balance and executes approved orders. OpenRouter carries every decision.
+            RobinArena puts GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 into isolated ledgers under a {{ formatCurrency(data.arena.operator_capital_ceiling) }} operator ceiling. Robinhood reports the deployable balance and executes approved orders. OpenRouter carries every decision.
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="#decisions">
@@ -140,6 +150,15 @@ onBeforeUnmount(pause);
             <a class="button button-quiet" href="#ledger">
               Follow live execution
               <Icon name="ph:arrow-down" aria-hidden="true" />
+            </a>
+            <a
+              class="button button-social"
+              href="https://x.com/RobinArenaFun"
+              target="_blank"
+              rel="me noopener noreferrer"
+            >
+              <Icon name="ph:x-logo" aria-hidden="true" />
+              Follow RobinArena on X
             </a>
           </div>
         </div>
@@ -500,7 +519,7 @@ onBeforeUnmount(pause);
 
       <footer class="arena-footer">
         <div>
-          <strong>Execution protocol</strong>
+          <strong>RobinArena execution protocol</strong>
           <p>OpenRouter returns one structured decision per model in each eligible cycle. An empty ledger must request a 20–40% opening position. Confidence, cash, position size, daily loss, and broker reconciliation gates run before any live order is reviewed.</p>
         </div>
         <dl>

@@ -202,12 +202,13 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
   if (!key) throw new OpenRouterRequestError("OpenRouterAPIKey is not configured", 0);
   const symbols = input.market.map((quote) => quote.symbol);
   const startedAt = Date.now();
-  const appUrl = process.env.OPENROUTER_APP_URL?.trim();
+  const appUrl = process.env.OPENROUTER_APP_URL?.trim()
+    || (process.env.NODE_ENV === "production" ? "https://robinarena.fun" : undefined);
   const openingPositionRequired = input.portfolio.positions.length === 0
     && input.portfolio.cash_balance >= 1;
 
   const system = [
-    "You are a competitor in Model Market, a week-long, long-only live trading arena using real money in a dedicated Robinhood Agentic account.",
+    "You are a competitor in RobinArena, a week-long, long-only live trading arena using real money in a dedicated Robinhood Agentic account.",
     "Choose one action from buy, sell, or hold using only the supplied snapshot.",
     openingPositionRequired
       ? "Opening participation is required because this portfolio has no position: buy the strongest relative symbol and allocate 20 to 40 percent."
@@ -252,7 +253,7 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
-        "X-OpenRouter-Title": "Model Market",
+        "X-OpenRouter-Title": "RobinArena",
         ...(appUrl ? { "HTTP-Referer": appUrl } : {}),
       },
       body: JSON.stringify({

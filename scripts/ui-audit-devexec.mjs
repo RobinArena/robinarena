@@ -40,11 +40,18 @@ try {
   const adminDesktop = await auditPage("/admin", "arena-admin-desktop.png", { width: 1440, height: 1000 }, true);
   const adminMobile = await auditPage("/admin", "arena-admin-mobile.png", { width: 390, height: 844 }, true);
 
-  assert.match(publicDesktop.text, /\$250/);
+  assert.match(publicDesktop.text, /One trading week/);
+  assert.match(publicDesktop.text, /\$25\.00/);
+  assert.match(publicDesktop.text, /\$100\.00/);
+  assert.match(publicDesktop.text, /7 days/);
+  assert.match(publicDesktop.text, /every 60 minutes/);
   assert.match(publicDesktop.text, /Robinhood/);
-  assert.doesNotMatch(publicDesktop.text, /\$100K|paper fills|replay tape/i);
+  assert.doesNotMatch(publicDesktop.text, /\$1,000|\$250|\$100K|paper fills|replay tape/i);
   assert.equal(publicDesktop.logoLoaded && publicMobile.logoLoaded, true);
-  assert.match(adminDesktop.text, /\$1,000 allocation/);
+  assert.match(adminDesktop.text, /\$100\.00 allocation/);
+  assert.match(adminDesktop.text, /\$25\.00/);
+  assert.match(adminDesktop.text, /Run hourly during market hours/);
+  assert.match(adminDesktop.text, /Weekly progress/);
   assert.match(adminDesktop.text, /Connect Robinhood/);
   assert.match(adminDesktop.text, /Arm live execution/);
   assert.equal(adminDesktop.logoLoaded && adminMobile.logoLoaded, true);

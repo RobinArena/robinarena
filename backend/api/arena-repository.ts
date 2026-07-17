@@ -1,4 +1,9 @@
 import { APIError } from "encore.dev/api";
+import {
+  DECISION_CYCLE_MINUTES,
+  competitionProgress,
+  regularMarketSessionOpen,
+} from "./arena-time";
 import { db } from "./db";
 import { openRouterIntegration } from "./openrouter";
 import { robinhoodIntegration } from "./robinhood-mcp";
@@ -9,6 +14,7 @@ import type {
   ArenaOrder,
   ArenaPosition,
   ArenaResponse,
+  ArenaRound,
   ArenaStatus,
   ArenaTrade,
   BrokerAccountSummary,
@@ -38,6 +44,7 @@ export interface AgentRow {
   status: "active" | "paused";
   openrouter_model: string;
   initial_balance: string | number;
+  round_starting_equity: string | number;
   cash_balance: string | number;
   equity: string | number;
   realized_pnl: string | number;
@@ -61,14 +68,24 @@ export interface ArenaStateRow {
   round_number: number;
   status: ArenaStatus;
   mode: "live";
+  operator_capital_ceiling: string | number;
   capital_limit: string | number;
   allocation_per_model: string | number;
+  capital_initialized_at: Date | string | null;
+  capital_source: "operator" | "robinhood";
   live_armed: boolean;
   automation_enabled: boolean;
   halted: boolean;
   halt_reason: string | null;
   round_in_progress: boolean;
   round_started_at: Date | string | null;
+  cycle_number: number;
+  cycle_in_progress: boolean;
+  cycle_started_at: Date | string | null;
+  last_cycle_at: Date | string | null;
+  next_cycle_at: Date | string;
+  competition_started_at: Date | string;
+  competition_ends_at: Date | string;
   broker_buying_power: string | number | null;
   broker_equity: string | number | null;
   broker_as_of: Date | string | null;
@@ -123,6 +140,7 @@ interface PositionRow {
 interface DecisionRow {
   id: string;
   round_number: number;
+  cycle_number: number;
   agent_id: string;
   agent_name: string;
   agent_code: string;
@@ -185,6 +203,20 @@ interface TradeRow {
   exit_reason: string | null;
 }
 
+interface RoundRow {
+  id: string;
+  round_number: number;
+  label: string;
+  status: "active" | "completed";
+  started_at: Date | string;
+  ends_at: Date | string;
+  starting_capital: string | number;
+  ending_capital: string | number | null;
+  winner_agent_id: string | null;
+  winner_agent_name: string | null;
+  winner_return_pct: string | number | null;
+}
+
 export function numeric(value: string | number | null | undefined): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -208,9 +240,13 @@ export async function getArenaState(): Promise<ArenaStateRow> {
 export async function listAgentRows(): Promise<AgentRow[]> {
   return db.queryAll<AgentRow>`
     SELECT a.*,
+      coalesce(result.starting_equity, a.initial_balance) AS round_starting_equity,
       (SELECT count(*) FROM arena_positions p
         WHERE p.agent_id = a.id AND p.status = 'open') AS open_positions
     FROM arena_agents a
+    LEFT JOIN arena_rounds round ON round.status = 'active'
+    LEFT JOIN arena_round_results result
+      ON result.round_id = round.id AND result.agent_id = a.id
     ORDER BY a.id
   `;
 }
@@ -219,6 +255,7 @@ export async function listModels(): Promise<ArenaModel[]> {
   const rows = await listAgentRows();
   const models = rows.map((row) => {
     const initial = numeric(row.initial_balance);
+    const roundStartingEquity = numeric(row.round_starting_equity);
     const equity = numeric(row.equity);
     return {
       id: row.id,
@@ -232,12 +269,15 @@ export async function listModels(): Promise<ArenaModel[]> {
       status: row.status,
       openrouter_model: row.openrouter_model,
       initial_balance: initial,
+      round_starting_equity: roundStartingEquity,
       cash_balance: numeric(row.cash_balance),
       equity,
       realized_pnl: numeric(row.realized_pnl),
       unrealized_pnl: numeric(row.unrealized_pnl),
-      total_pnl: equity - initial,
-      return_pct: initial === 0 ? 0 : ((equity - initial) / initial) * 100,
+      total_pnl: equity - roundStartingEquity,
+      return_pct: roundStartingEquity === 0
+        ? 0
+        : ((equity - roundStartingEquity) / roundStartingEquity) * 100,
       win_rate: numeric(row.win_rate),
       max_drawdown_pct: numeric(row.max_drawdown_pct),
       total_trades: row.total_trades,
@@ -273,13 +313,17 @@ export async function listEquitySeries(): Promise<EquitySeries[]> {
   const rows = await db.queryAll<EquityRow>`
     SELECT agent_id, agent_name, accent, initial_balance, equity, captured_at
     FROM (
-      SELECT s.agent_id, a.name AS agent_name, a.accent, a.initial_balance,
+      SELECT s.agent_id, a.name AS agent_name, a.accent,
+        result.starting_equity AS initial_balance,
         s.equity, s.captured_at,
         row_number() OVER (PARTITION BY s.agent_id ORDER BY s.captured_at DESC) AS sequence
       FROM arena_equity_snapshots s
       JOIN arena_agents a ON a.id = s.agent_id
+      JOIN arena_rounds round ON round.id = s.round_id AND round.status = 'active'
+      JOIN arena_round_results result
+        ON result.round_id = round.id AND result.agent_id = s.agent_id
     ) recent
-    WHERE sequence <= 288
+    WHERE sequence <= 2016
     ORDER BY captured_at, agent_id
   `;
   const series = new Map<string, EquitySeries>();
@@ -348,6 +392,7 @@ export async function listDecisions(): Promise<ArenaDecision[]> {
   return rows.map((row) => ({
     id: row.id,
     round_number: row.round_number,
+    cycle_number: row.cycle_number,
     agent_id: row.agent_id,
     agent_name: row.agent_name,
     agent_code: row.agent_code,
@@ -457,8 +502,11 @@ export async function markToMarket(): Promise<void> {
 
 export async function recordEquitySnapshots(): Promise<void> {
   await db.exec`
-    INSERT INTO arena_equity_snapshots (agent_id, equity, source)
-    SELECT id, equity, 'robinhood_mcp' FROM arena_agents
+    INSERT INTO arena_equity_snapshots (agent_id, equity, source, round_id)
+    SELECT agent.id, agent.equity, 'robinhood_mcp', round.id
+    FROM arena_agents agent
+    CROSS JOIN arena_rounds round
+    WHERE round.status = 'active'
   `;
   await db.exec`
     WITH peaks AS (
@@ -474,6 +522,34 @@ export async function recordEquitySnapshots(): Promise<void> {
   `;
 }
 
+export async function listRoundHistory(): Promise<ArenaRound[]> {
+  const rows = await db.queryAll<RoundRow>`
+    SELECT round.id, round.round_number, round.label, round.status,
+      round.started_at, round.ends_at, round.starting_capital,
+      round.ending_capital, round.winner_agent_id,
+      agent.name AS winner_agent_name, round.winner_return_pct
+    FROM arena_rounds round
+    LEFT JOIN arena_agents agent ON agent.id = round.winner_agent_id
+    ORDER BY round.round_number DESC
+    LIMIT 8
+  `;
+  return rows.map((row) => ({
+    id: row.id,
+    round_number: row.round_number,
+    label: row.label,
+    status: row.status,
+    started_at: timestamp(row.started_at),
+    ends_at: timestamp(row.ends_at),
+    starting_capital: numeric(row.starting_capital),
+    ending_capital: row.ending_capital === null ? undefined : numeric(row.ending_capital),
+    winner_agent_id: row.winner_agent_id || undefined,
+    winner_agent_name: row.winner_agent_name || undefined,
+    winner_return_pct: row.winner_return_pct === null
+      ? undefined
+      : numeric(row.winner_return_pct),
+  }));
+}
+
 export async function storedBrokerSummary(state?: ArenaStateRow): Promise<BrokerAccountSummary | undefined> {
   const current = state || await getArenaState();
   if (current.broker_buying_power === null || current.broker_equity === null || !current.broker_as_of) {
@@ -487,6 +563,10 @@ export async function storedBrokerSummary(state?: ArenaStateRow): Promise<Broker
     buying_power: numeric(current.broker_buying_power),
     equity: numeric(current.broker_equity),
     as_of: timestamp(current.broker_as_of),
+    operator_capital_ceiling: numeric(current.operator_capital_ceiling),
+    deployable_capital: numeric(current.capital_limit),
+    allocation_per_model: numeric(current.allocation_per_model),
+    capital_source: current.capital_source,
     allocated_capital: numeric(current.capital_limit),
     managed_exposure: numeric(exposure?.value),
     unmanaged_positions: current.broker_unmanaged_positions || [],
@@ -494,9 +574,20 @@ export async function storedBrokerSummary(state?: ArenaStateRow): Promise<Broker
 }
 
 export async function buildArena(): Promise<ArenaResponse> {
-  const [state, models, market, equitySeries, positions, decisions, orders, trades] = await Promise.all([
+  const [
+    state,
+    models,
+    roundHistory,
+    market,
+    equitySeries,
+    positions,
+    decisions,
+    orders,
+    trades,
+  ] = await Promise.all([
     getArenaState(),
     listModels(),
+    listRoundHistory(),
     listMarket(),
     listEquitySeries(),
     listPositions(),
@@ -504,7 +595,7 @@ export async function buildArena(): Promise<ArenaResponse> {
     listOrders(),
     listTrades(),
   ]);
-  const startingCapital = models.reduce((sum, model) => sum + model.initial_balance, 0);
+  const startingCapital = models.reduce((sum, model) => sum + model.round_starting_equity, 0);
   const totalEquity = models.reduce((sum, model) => sum + model.equity, 0);
   const totalPnl = totalEquity - startingCapital;
   const pendingOrders = orders.filter((order) => !order.reconciled_at).length;
@@ -513,10 +604,14 @@ export async function buildArena(): Promise<ArenaResponse> {
       title: state.title,
       season: state.season,
       round_number: state.round_number,
+      cycle_number: state.cycle_number,
+      round_status: "active",
       status: state.status,
       mode: state.mode,
+      operator_capital_ceiling: numeric(state.operator_capital_ceiling),
       capital_limit: numeric(state.capital_limit),
       allocation_per_model: numeric(state.allocation_per_model),
+      capital_source: state.capital_source,
       starting_capital: startingCapital,
       total_equity: totalEquity,
       total_pnl: totalPnl,
@@ -527,14 +622,29 @@ export async function buildArena(): Promise<ArenaResponse> {
       live_armed: state.live_armed,
       automation_enabled: state.automation_enabled,
       halted: state.halted,
-      last_round_at: timestamp(state.last_round_at),
-      next_round_at: timestamp(state.next_round_at),
+      round_started_at: timestamp(state.competition_started_at),
+      round_ends_at: timestamp(state.competition_ends_at),
+      round_progress_pct: competitionProgress(
+        state.competition_started_at,
+        state.competition_ends_at,
+      ),
+      cycle_interval_minutes: DECISION_CYCLE_MINUTES,
+      market_session_open: regularMarketSessionOpen(),
+      last_cycle_at: state.last_cycle_at ? timestamp(state.last_cycle_at) : undefined,
+      next_cycle_at: timestamp(state.next_cycle_at),
+      last_round_at: timestamp(state.competition_started_at),
+      next_round_at: timestamp(state.competition_ends_at),
       last_robinhood_sync_at: state.last_robinhood_sync_at
         ? timestamp(state.last_robinhood_sync_at)
         : undefined,
+      broker_equity: state.broker_equity === null ? undefined : numeric(state.broker_equity),
+      broker_buying_power: state.broker_buying_power === null
+        ? undefined
+        : numeric(state.broker_buying_power),
       leader_id: models[0]?.id || "",
     },
     models,
+    round_history: roundHistory,
     market,
     equity_series: equitySeries,
     positions,

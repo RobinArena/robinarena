@@ -1,8 +1,11 @@
 # Model Market
 
-Model Market is an OpenRouter-powered paper trading arena for four language
-models. Each competitor starts with an isolated $100K portfolio and receives
-the same market replay on every round.
+Model Market is a live trading arena for four language models. OpenRouter routes
+their decisions, Robinhood Trading MCP supplies account and market data, and a
+dedicated Robinhood Agentic account executes approved orders.
+
+The operator capital ceiling is $100. Week 01 starts each model with an isolated
+$25 ledger.
 
 | Competitor | OpenRouter model |
 | --- | --- |
@@ -11,51 +14,52 @@ the same market replay on every round.
 | Claude Fable 5 | `anthropic/claude-fable-5` |
 | Grok 4.5 | `x-ai/grok-4.5` |
 
-The dashboard includes a multi-model equity chart, leaderboard, shared market
-tape, model decision stream, open positions, closed trades, and execution
-ledger. Trading is paper-only. OpenRouter provides the model decisions and the
-local replay tape provides identical prices to every competitor.
+Competition rounds last seven days and roll automatically. When live execution
+and automation are armed, one decision cycle becomes eligible every 60 minutes
+during the regular US market session. A five-minute scheduler reconciles the
+broker, checks the weekly boundary, and starts eligible cycles.
 
-## OpenRouter setup
+The public dashboard shows the weekly equity chart, leaderboard, Robinhood
+quotes, model decisions, positions, orders, closed trades, and broker-backed
+capital. A position enters the ledger only after Robinhood reports its fill.
 
-Store the OpenRouter API key and a private operator key as runtime secrets:
+## Credentials
+
+Store runtime credentials with nstack:
 
 ```sh
 nstack env set OpenRouterAPIKey
 nstack env set ArenaOperatorKey
-```
-
-Push the secrets when using a configured deployment target:
-
-```sh
 nstack env push
 ```
 
-`ArenaOperatorKey` protects `POST /arena/round`, which can create four paid
-model requests. Send it as `Authorization: Bearer <key>`. Local development has
-the operator key `dev-model-market` when `ArenaOperatorKey` is unset. Production
-requires an explicit operator key.
+`ArenaOperatorKey` is the private password for `/admin`. It is chosen by the
+deployer and is separate from the OpenRouter API key and Robinhood OAuth
+connection. Local development falls back to `dev-model-market` when the
+operator key is unset. Production requires an explicit value.
 
-The backend sends all four requests concurrently through the OpenRouter chat
-completions endpoint. Every request uses one strict JSON schema for action,
-symbol, confidence, allocation, and rationale. A model or provider failure is
-recorded as a skipped decision for that portfolio while the other results
-continue. Decisions retain the routed model, OpenRouter request ID, latency,
-token counts, generation cost, requested action, and executed paper notional.
+Connect the dedicated Robinhood Agentic account from `/admin`. OAuth tokens are
+encrypted with the operator key before storage. The broker sync reads the
+account equity, buying power, positions, orders, and shared quote universe. The
+effective arena capital is the lower of verified Robinhood equity and the $100
+operator ceiling.
 
-## Trading rules
+## Execution rules
 
-Each round follows the execution order used by the RobinSharks reference app:
+Each decision cycle follows the RobinSharks execution model:
 
-1. Advance one shared market tape and mark every open position at that quote.
-2. Apply hard stops and take-profit exits before requesting new model decisions.
-3. Ask each model for one long-only action using the same market snapshot.
-4. Enforce confidence, cash, daily-loss, risk-per-trade, position-size, and duplicate-position limits.
-5. Fill approved paper orders at the shared replay quote.
-6. Append decisions, orders, trades, positions, and equity records to PostgreSQL.
+1. Reconcile Robinhood orders and reported fills.
+2. Import one shared quote snapshot and mark every open position.
+3. Submit hard-stop or take-profit exits before model inference.
+4. Ask all four models concurrently for one structured long-only decision.
+5. Enforce confidence, cash, daily loss, risk per trade, position size, broker buying power, and duplicate-position limits.
+6. Submit approved orders to Robinhood and reconcile the resulting broker state.
+7. Append decisions, orders, trades, positions, and equity snapshots to PostgreSQL.
 
-The replay uses a 5% hard stop and a 10% target. Every model has its own
-confidence threshold, risk budget, and concentration cap.
+The arena uses a 5% hard stop and 10% take-profit level. Each model has its own
+confidence threshold, risk budget, and concentration cap. Live execution,
+automation, halt, cancellation, and flatten controls remain behind the operator
+console.
 
 ## Local development
 
@@ -72,27 +76,38 @@ pnpm devexec 'return await apiJson("/arena")'
 pnpm devexec 'return await screenshot("/", { width: 1440, height: 1000 })'
 ```
 
-The Encore endpoints are:
+Primary endpoints:
 
 ```text
 GET  /arena
-POST /arena/round
-GET  /integrations/openrouter
+GET  /admin/status
+POST /admin/robinhood/connect
+POST /admin/sync
+POST /admin/arm
+POST /admin/disarm
+POST /admin/round
+POST /admin/halt
+POST /admin/cancel
+POST /admin/flatten
 GET  /ready
 GET  /status
 ```
 
+Authenticated endpoints expect `Authorization: Bearer <ArenaOperatorKey>`.
+Manual decision cycles and destructive controls also require their confirmation
+phrases.
+
 ## Project structure
 
-`backend/api/openrouter.ts` owns the OpenRouter request, strict response schema,
-and model mapping. `backend/api/arena.ts` owns the replay runner, portfolio risk
-checks, paper fills, and dashboard response. Migrations under
-`backend/api/migrations` create and seed the PostgreSQL ledger. The Nuxt
-interface lives under `frontend/app` and calls Encore through the generated
-client wrapped by `apiClient()`.
+`backend/api/live-engine.ts` owns Robinhood reconciliation, risk checks, weekly
+rounds, model cycles, and live order accounting. `backend/api/openrouter.ts`
+owns the model mapping and structured decision contract.
+`backend/api/arena-repository.ts` builds the public ledger response. Migrations
+under `backend/api/migrations` create the PostgreSQL state.
 
-`pnpm check`, `pnpm build`, and `nstack deploy` regenerate
-`frontend/app/generated/encore-client.ts` from local Encore metadata.
+The Nuxt interface lives under `frontend/app` and calls Encore through the
+generated client wrapped by `apiClient()`. `pnpm check`, `pnpm build`, and
+`nstack deploy` regenerate that client from local Encore metadata.
 
 ## Deployment
 
@@ -104,6 +119,6 @@ nstack deploy
 nstack status
 ```
 
-Deploy settings live in `.nstack/local.env`. Runtime secrets belong in
-`.nstack/secrets.env` and should be managed with `nstack env set`,
-`nstack env push`, and `nstack env pull`.
+Deploy settings live under `.nstack/`. Runtime secrets stay outside source
+control and are managed with `nstack env set`, `nstack env push`, and
+`nstack env pull`.

@@ -121,12 +121,12 @@ onBeforeUnmount(pause);
             GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 compete through isolated ledgers under a {{ formatCurrency(data.arena.operator_capital_ceiling) }} operator ceiling. Robinhood reports the deployable balance and executes approved orders. OpenRouter carries every decision.
           </p>
           <div class="hero-actions">
-            <NuxtLink class="button button-primary" to="/admin">
-              <Icon name="ph:shield-check" aria-hidden="true" />
-              Open operator console
-            </NuxtLink>
+            <a class="button button-primary" href="#decisions">
+              <Icon name="ph:brain" aria-hidden="true" />
+              Read model rationale
+            </a>
             <a class="button button-quiet" href="#ledger">
-              View the live ledger
+              Follow live execution
               <Icon name="ph:arrow-down" aria-hidden="true" />
             </a>
           </div>
@@ -264,6 +264,20 @@ onBeforeUnmount(pause);
         </div>
       </section>
 
+      <section id="decisions" class="activity-section section-anchor" aria-labelledby="activity-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="activity-heading">Inside the latest cycle</h2>
+            <p>Each model publishes a concise structured rationale with its requested action. The risk engine then records what was approved and what reached Robinhood.</p>
+          </div>
+          <div class="section-fact">
+            <span>Decision cycle</span>
+            <strong>#{{ data.arena.cycle_number }}</strong>
+          </div>
+        </div>
+        <AgentActivityBoard :models="data.models" :decisions="data.decisions" />
+      </section>
+
       <section id="models" class="models-section section-anchor" aria-labelledby="models-heading">
         <div class="section-heading">
           <div>
@@ -331,7 +345,7 @@ onBeforeUnmount(pause);
           <div class="panel-heading">
             <div>
               <h2 id="decisions-heading">Decision stream</h2>
-              <p>Model rationale followed by the risk engine result.</p>
+              <p>Every submitted rationale and risk result, newest first.</p>
             </div>
             <label class="model-filter">
               <span>Model</span>

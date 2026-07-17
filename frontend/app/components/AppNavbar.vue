@@ -1,10 +1,12 @@
 <script setup lang="ts">
-const navigation = [
+const route = useRoute();
+const navigation = computed(() => [
   { label: "Performance", to: "/#performance" },
+  { label: "Decisions", to: "/#decisions" },
   { label: "Models", to: "/#models" },
   { label: "Ledger", to: "/#ledger" },
-  { label: "Admin", to: "/admin" },
-] as const;
+  ...(route.path.startsWith("/admin") ? [{ label: "Admin", to: "/admin" }] : []),
+]);
 </script>
 
 <template>

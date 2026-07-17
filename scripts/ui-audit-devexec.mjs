@@ -46,6 +46,9 @@ try {
   assert.match(publicDesktop.text, /7 days/);
   assert.match(publicDesktop.text, /every 60 minutes/);
   assert.match(publicDesktop.text, /Robinhood/);
+  assert.match(publicDesktop.text, /Inside the latest cycle/);
+  assert.match(publicDesktop.text, /structured rationale/);
+  assert.doesNotMatch(publicDesktop.text, /Open operator console|\bAdmin\b/);
   assert.doesNotMatch(publicDesktop.text, /\$1,000|\$250|\$100K|paper fills|replay tape/i);
   assert.equal(publicDesktop.logoLoaded && publicMobile.logoLoaded, true);
   assert.match(adminDesktop.text, /\$100\.00 allocation/);

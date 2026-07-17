@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { api } from "~/generated/encore-client";
-import { formatClock } from "~/utils/format";
+import { formatClock, formatCurrency } from "~/utils/format";
 
 defineProps<{
   decisions: api.ArenaDecision[];
@@ -9,7 +9,7 @@ defineProps<{
 
 <template>
   <div v-if="decisions.length" class="decision-feed">
-    <article v-for="decision in decisions.slice(0, 9)" :key="decision.id" class="decision-item">
+    <article v-for="decision in decisions.slice(0, 16)" :key="decision.id" class="decision-item">
       <ModelGlyph :code="decision.agent_code" :accent="decision.agent_accent" size="small" />
       <div class="decision-body">
         <div class="decision-meta">
@@ -20,6 +20,11 @@ defineProps<{
         </div>
         <p>{{ decision.rationale }}</p>
         <small>{{ decision.risk_note }}</small>
+        <div class="decision-facts">
+          <span>Requested {{ decision.requested_action }} {{ decision.requested_allocation_pct.toFixed(0) }}%</span>
+          <span>Proposed {{ formatCurrency(decision.proposed_notional) }}</span>
+          <span>Executed {{ decision.executed_notional > 0 ? formatCurrency(decision.executed_notional) : "none" }}</span>
+        </div>
         <div v-if="decision.source === 'openrouter'" class="decision-provider">
           <Icon name="ph:circles-three-plus" aria-hidden="true" />
           <span>{{ decision.provider_model || "OpenRouter" }}</span>

@@ -345,7 +345,12 @@ onBeforeUnmount(pause);
               </button>
             </div>
           </div>
-          <ArenaEquityChart :series="data.equity_series" :range="chartRange" />
+          <ArenaEquityChart
+            :series="data.equity_series"
+            :models="data.models"
+            :positions="data.positions"
+            :range="chartRange"
+          />
         </div>
 
         <aside class="panel leaderboard-panel" aria-labelledby="leaderboard-heading">

@@ -827,20 +827,98 @@ a {
 }
 
 .arena-chart {
-  padding: 0.7rem 1rem 1rem;
+  min-width: 0;
+}
+
+.chart-toolbar {
+  display: flex;
+  min-height: 4.4rem;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.chart-toolbar > div:first-child {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.chart-toolbar strong {
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.chart-toolbar span {
+  color: var(--color-muted);
+  font-size: 0.76rem;
+}
+
+.chart-series-controls {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.35rem;
+}
+
+.chart-series-controls button {
+  display: inline-flex;
+  min-height: 2.2rem;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.58rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-small);
+  background: var(--color-background);
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.chart-series-controls button:hover {
+  border-color: var(--color-line-strong);
+  color: var(--color-text);
+}
+
+.chart-series-controls button.is-active {
+  border-color: var(--series-accent, var(--color-accent));
+  background: var(--color-surface-strong);
+  color: var(--color-text);
+}
+
+.series-control-swatch {
+  display: block;
+  width: 1rem;
+  height: 2px;
+  background: var(--series-accent);
 }
 
 .chart-canvas {
-  position: relative;
-  min-height: 20.625rem;
+  min-width: 0;
+  padding: 0.45rem 1rem 0;
 }
 
-.chart-canvas svg {
+.chart-plot-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+.chart-plot-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1000 / 360;
+}
+
+.chart-plot-stage > svg {
   display: block;
   width: 100%;
-  height: 20.625rem;
+  height: 100%;
   overflow: visible;
-  touch-action: pan-y;
+  touch-action: pan-x pan-y;
 }
 
 .chart-grid-line {
@@ -859,15 +937,27 @@ a {
 .chart-axis-label {
   fill: var(--color-quiet);
   font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.chart-time-label {
   font-size: 12px;
 }
 
 .model-chart-line {
   fill: none;
   stroke: var(--series-accent);
+  stroke-dasharray: var(--series-dash);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2.25;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-last-point {
+  fill: var(--series-accent);
+  stroke: var(--color-background);
+  stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
 
@@ -887,10 +977,10 @@ a {
 
 .chart-tooltip {
   position: absolute;
-  top: 0.7rem;
+  top: 1rem;
   z-index: 2;
-  width: 15.5rem;
-  padding: 0.8rem;
+  width: 18rem;
+  padding: 0.85rem;
   border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-small);
   background: var(--color-tooltip);
@@ -912,16 +1002,24 @@ a {
 
 .chart-tooltip > div {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.45rem;
-  margin-top: 0.34rem;
-  font-size: 0.78rem;
+  margin-top: 0.45rem;
+  font-size: 0.8rem;
 }
 
 .chart-tooltip strong {
+  display: grid;
+  justify-items: end;
+  gap: 0.05rem;
   font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.chart-tooltip strong small {
+  font-size: 0.72rem;
 }
 
 .legend-swatch {
@@ -935,34 +1033,148 @@ a {
   background: var(--series-accent);
 }
 
-.chart-legend {
+.portfolio-lanes {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.6rem;
-  padding: 0 0.35rem;
+  border-top: 1px solid var(--color-line);
 }
 
-.chart-legend > div {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 0.4rem;
+.portfolio-lane {
   min-width: 0;
+  padding: 0.9rem;
+  border-right: 1px solid var(--color-line);
+  background: var(--color-surface);
 }
 
-.chart-legend span:not(.legend-swatch) {
+.portfolio-lane:last-child {
+  border-right: 0;
+}
+
+.portfolio-lane.is-focused {
+  box-shadow: inset 0 2px 0 var(--series-accent);
+  background: var(--color-surface-raised);
+}
+
+.portfolio-lane > button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.portfolio-lane > button > span:not(.model-glyph) {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.portfolio-lane > button strong {
   overflow: hidden;
-  color: var(--color-muted);
-  font-size: 0.76rem;
+  font-size: 0.8rem;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chart-legend strong {
-  grid-column: 2;
+.portfolio-lane > button small {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-lane .portfolio-lane-return {
   font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 500;
+}
+
+.portfolio-lane > svg {
+  display: block;
+  width: 100%;
+  height: 2.75rem;
+  margin-top: 0.85rem;
+  overflow: visible;
+}
+
+.portfolio-lane > svg line {
+  stroke: var(--color-line-strong);
+  stroke-dasharray: 3 4;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.portfolio-lane > svg path {
+  fill: none;
+  stroke: var(--series-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.portfolio-lane dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0.75rem 0 0;
+  border-block: 1px solid var(--color-line);
+}
+
+.portfolio-lane dl > div {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem 0.4rem;
+  border-right: 1px solid var(--color-line);
+}
+
+.portfolio-lane dl > div:first-child {
+  padding-left: 0;
+}
+
+.portfolio-lane dl > div:last-child {
+  padding-right: 0;
+  border-right: 0;
+}
+
+.portfolio-lane dt {
+  color: var(--color-muted);
+  font-size: 0.7rem;
+}
+
+.portfolio-lane dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.portfolio-lane footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  border: 0 !important;
+  margin: -1px !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
 }
 
 .leaderboard-panel {
@@ -1011,6 +1223,7 @@ a {
   display: inline-grid;
   flex: 0 0 auto;
   place-items: center;
+  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--model-accent) 48%, var(--color-line));
   border-radius: var(--radius-small);
   background: color-mix(in srgb, var(--model-accent) 9%, var(--color-surface));
@@ -1018,6 +1231,18 @@ a {
   font-family: var(--font-mono);
   font-weight: 600;
   letter-spacing: -0.04em;
+}
+
+.model-glyph.has-provider-mark {
+  border-color: var(--color-line-strong);
+  background: var(--color-surface);
+}
+
+.model-glyph.has-provider-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .model-glyph.is-small {
@@ -2369,8 +2594,16 @@ a {
     border-top: 1px solid var(--color-line);
   }
 
-  .chart-legend {
+  .portfolio-lanes {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .portfolio-lane:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .portfolio-lane:nth-child(n + 3) {
+    border-top: 1px solid var(--color-line);
   }
 
   .section-heading {
@@ -2513,18 +2746,39 @@ a {
     flex: 1;
   }
 
-  .arena-chart {
+  .chart-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .chart-series-controls {
+    justify-content: flex-start;
+  }
+
+  .chart-canvas {
     padding-inline: 0.25rem;
   }
 
-  .chart-canvas,
-  .chart-canvas svg {
-    min-height: 16rem;
-    height: 16rem;
+  .chart-plot-stage {
+    width: 46rem;
   }
 
   .chart-tooltip {
-    width: 13rem;
+    width: 16rem;
+  }
+
+  .portfolio-lanes {
+    grid-template-columns: 1fr;
+  }
+
+  .portfolio-lane,
+  .portfolio-lane:nth-child(n) {
+    border-top: 1px solid var(--color-line);
+    border-right: 0;
+  }
+
+  .portfolio-lane:first-child {
+    border-top: 0;
   }
 
   .leaderboard-row {

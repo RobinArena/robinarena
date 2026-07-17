@@ -34,11 +34,83 @@ async function auditPage(route, file, viewport, authenticated = false) {
   return { text, logoLoaded };
 }
 
+async function auditThemeSwitch() {
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    deviceScaleFactor: 1,
+  });
+  const page = await context.newPage();
+  page.on("pageerror", (error) => failures.push(`theme: ${error.message}`));
+  page.on("console", (entry) => {
+    if (entry.type() === "error") failures.push(`theme: ${entry.text()}`);
+  });
+  await page.goto(frontendURL, { waitUntil: "networkidle", timeout: 30_000 });
+  await page.waitForSelector(".arena-hero", { timeout: 10_000 });
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  await page.locator('html[data-theme="light"]').waitFor();
+  assert.equal(
+    await page.evaluate(() => localStorage.getItem("model-market-theme")),
+    "light",
+  );
+  assert.equal(
+    await page.locator('meta[name="theme-color"]').getAttribute("content"),
+    "#f3f4ed",
+  );
+  await page.screenshot({
+    path: join(output, "arena-public-light-desktop.png"),
+    fullPage: true,
+  });
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector(".arena-hero", { timeout: 10_000 });
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
+  await page.getByRole("button", { name: "Switch to dark mode" }).waitFor();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: join(output, "arena-public-light-mobile.png"),
+    fullPage: true,
+  });
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.evaluate(() => {
+    sessionStorage.setItem("model-market-operator-key", "ui-operator");
+  });
+  await page.goto(`${frontendURL}/admin`, { waitUntil: "networkidle", timeout: 30_000 });
+  await page.waitForSelector(".admin-readiness", { timeout: 10_000 });
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
+  await page.screenshot({
+    path: join(output, "arena-admin-light-desktop.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: join(output, "arena-admin-light-mobile.png"),
+    fullPage: true,
+  });
+
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  await page.locator('html[data-theme="dark"]').waitFor();
+  assert.equal(
+    await page.evaluate(() => localStorage.getItem("model-market-theme")),
+    "dark",
+  );
+  await context.close();
+  return {
+    publicDesktop: join(output, "arena-public-light-desktop.png"),
+    publicMobile: join(output, "arena-public-light-mobile.png"),
+    adminDesktop: join(output, "arena-admin-light-desktop.png"),
+    adminMobile: join(output, "arena-admin-light-mobile.png"),
+  };
+}
+
 try {
   const publicDesktop = await auditPage("/", "arena-public-desktop.png", { width: 1440, height: 1000 });
   const publicMobile = await auditPage("/", "arena-public-mobile.png", { width: 390, height: 844 });
   const adminDesktop = await auditPage("/admin", "arena-admin-desktop.png", { width: 1440, height: 1000 }, true);
   const adminMobile = await auditPage("/admin", "arena-admin-mobile.png", { width: 390, height: 844 }, true);
+  const lightTheme = await auditThemeSwitch();
 
   assert.match(publicDesktop.text, /One trading week/);
   assert.match(publicDesktop.text, /\$25\.00/);
@@ -66,8 +138,13 @@ try {
     public_mobile: join(output, "arena-public-mobile.png"),
     admin_desktop: join(output, "arena-admin-desktop.png"),
     admin_mobile: join(output, "arena-admin-mobile.png"),
+    light_public_desktop: lightTheme.publicDesktop,
+    light_public_mobile: lightTheme.publicMobile,
+    light_admin_desktop: lightTheme.adminDesktop,
+    light_admin_mobile: lightTheme.adminMobile,
     browser_errors: failures.length,
     logo_loaded: true,
+    theme_persistence: true,
   };
 } finally {
   await browser.close();

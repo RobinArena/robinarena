@@ -14,11 +14,43 @@
   --color-positive: #d9ff63;
   --color-negative: #ff816f;
   --color-warning: #f5c96a;
+  --color-header: rgb(10 12 10 / 94%);
+  --color-tooltip: rgb(16 19 16 / 97%);
+  --color-accent-hover: #e4ff8f;
+  --color-body-strong: #d8dcd5;
+  --color-body-medium: #c7ccc4;
+  --color-table-text: #cbd0c8;
+  --color-danger-ink: #190b08;
   --font-sans: "Instrument Sans", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
   --radius-small: 0.3rem;
   --radius-medium: 0.55rem;
   --radius-large: 0.8rem;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-background: #f3f4ed;
+  --color-surface: #fafbf6;
+  --color-surface-raised: #ecefe5;
+  --color-surface-strong: #e1e5da;
+  --color-text: #172017;
+  --color-muted: #566157;
+  --color-quiet: #646e64;
+  --color-line: #d4dacd;
+  --color-line-strong: #adb8aa;
+  --color-accent: #567000;
+  --color-accent-ink: #f9fbea;
+  --color-positive: #567000;
+  --color-negative: #b33c2e;
+  --color-warning: #805b00;
+  --color-header: rgb(243 244 237 / 94%);
+  --color-tooltip: rgb(250 251 246 / 97%);
+  --color-accent-hover: #486000;
+  --color-body-strong: #303a31;
+  --color-body-medium: #3f493f;
+  --color-table-text: #303a31;
+  --color-danger-ink: #fffaf5;
 }
 
 * {
@@ -103,7 +135,7 @@ a {
   top: 0;
   z-index: 30;
   border-bottom: 1px solid var(--color-line);
-  background: rgb(10 12 10 / 94%);
+  background: var(--color-header);
   backdrop-filter: blur(14px);
 }
 
@@ -175,9 +207,15 @@ a {
   color: var(--color-text);
 }
 
+.header-tools {
+  display: flex;
+  justify-self: end;
+  align-items: center;
+  gap: 0.85rem;
+}
+
 .nav-state {
   display: inline-flex;
-  justify-self: end;
   align-items: center;
   gap: 0.45rem;
   color: var(--color-accent);
@@ -188,6 +226,35 @@ a {
 
 .nav-state svg {
   font-size: 1rem;
+}
+
+.theme-toggle {
+  display: inline-grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-small);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--color-muted);
+  background: var(--color-surface-raised);
+  color: var(--color-accent);
+  transform: translateY(-1px);
+}
+
+.theme-toggle:active {
+  transform: translateY(1px);
+}
+
+.theme-toggle svg {
+  font-size: 1.15rem;
 }
 
 .site-main {
@@ -271,7 +338,7 @@ a {
 }
 
 .button-primary:hover {
-  background: #e4ff8f;
+  background: var(--color-accent-hover);
 }
 
 .button-quiet {
@@ -689,6 +756,7 @@ a {
 
 .model-chart-line {
   fill: none;
+  stroke: var(--series-accent);
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2.25;
@@ -703,6 +771,7 @@ a {
 }
 
 .chart-hover-point {
+  fill: var(--series-accent);
   stroke: var(--color-background);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
@@ -716,7 +785,7 @@ a {
   padding: 0.8rem;
   border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-small);
-  background: rgb(16 19 16 / 97%);
+  background: var(--color-tooltip);
   pointer-events: none;
   transform: translateX(0.7rem);
 }
@@ -752,6 +821,10 @@ a {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
+}
+
+.legend-swatch.is-series {
+  background: var(--series-accent);
 }
 
 .chart-legend {
@@ -1064,7 +1137,7 @@ a {
 
 .agent-rationale p {
   margin: 0.65rem 0 0;
-  color: #d8dcd5;
+  color: var(--color-body-strong);
   font-size: 1rem;
   line-height: 1.58;
 }
@@ -1461,7 +1534,7 @@ a {
 
 .decision-body p {
   margin: 0.45rem 0 0;
-  color: #c7ccc4;
+  color: var(--color-body-medium);
   font-size: 0.78rem;
   line-height: 1.45;
 }
@@ -1572,7 +1645,7 @@ a {
 }
 
 .data-table td {
-  color: #cbd0c8;
+  color: var(--color-table-text);
   font-family: var(--font-mono);
 }
 
@@ -1757,6 +1830,35 @@ a {
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 3px;
+}
+
+:root[data-theme="light"] .model-chart-line {
+  stroke: color-mix(in srgb, var(--series-accent) 58%, var(--color-text));
+}
+
+:root[data-theme="light"] .chart-hover-point {
+  fill: color-mix(in srgb, var(--series-accent) 58%, var(--color-text));
+}
+
+:root[data-theme="light"] .legend-swatch.is-series {
+  background: color-mix(in srgb, var(--series-accent) 58%, var(--color-text));
+}
+
+:root[data-theme="light"] .model-glyph,
+:root[data-theme="light"] .agent-rationale > span,
+:root[data-theme="light"] .agent-risk-note > span,
+:root[data-theme="light"] .agent-activity-empty svg,
+:root[data-theme="light"] .model-strategy,
+:root[data-theme="light"] .model-card-foot button:hover {
+  color: color-mix(in srgb, var(--model-accent) 58%, var(--color-text));
+}
+
+:root[data-theme="light"] .return-track span {
+  background: color-mix(in srgb, var(--model-accent) 58%, var(--color-text));
+}
+
+:root[data-theme="light"] .model-card.is-leader {
+  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--model-accent) 58%, var(--color-text));
 }
 
 @keyframes spin {
@@ -2622,7 +2724,7 @@ a {
 
 .button-danger {
   background: var(--color-negative);
-  color: #190b08;
+  color: var(--color-danger-ink);
 }
 
 .button-danger-outline {

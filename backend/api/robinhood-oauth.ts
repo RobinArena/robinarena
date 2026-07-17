@@ -263,7 +263,9 @@ export async function completeRobinhoodOAuth(code: string, state: string): Promi
   `;
   await db.exec`
     UPDATE arena_state SET robinhood_oauth_connected = true,
-      robinhood_oauth_expires_at = ${token.expiresAt}, robinhood_error = NULL, updated_at = now()
+      robinhood_oauth_expires_at = ${token.expiresAt}, robinhood_error = NULL,
+      scheduler_consecutive_failures = 0, scheduler_retry_at = NULL,
+      updated_at = now()
     WHERE id = 1
   `;
   accessTokenPromise = undefined;

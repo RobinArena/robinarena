@@ -25,6 +25,7 @@ const arena = computed(() => status.value?.arena);
 const broker = computed(() => status.value?.broker);
 const readiness = computed(() => {
   if (!arena.value) return [];
+  const scheduler = status.value?.scheduler;
   return [
     {
       label: "OpenRouter",
@@ -60,6 +61,22 @@ const readiness = computed(() => {
       detail: broker.value?.unmanaged_positions.length
         ? broker.value.unmanaged_positions.join(", ")
         : "No unmanaged symbols",
+    },
+    {
+      label: "Scheduler",
+      value: scheduler?.status === "healthy"
+        ? "Online"
+        : scheduler?.status === "delayed"
+          ? "Delayed"
+          : scheduler?.status === "error"
+            ? "Needs attention"
+            : "Not armed",
+      ready: scheduler?.status === "healthy",
+      detail: scheduler?.status === "error"
+        ? `${scheduler.consecutive_failures} consecutive failures. ${scheduler.last_error || "The next retry is queued."}`
+        : scheduler?.last_seen_at
+          ? `Checked ${formatRelativeTime(scheduler.last_seen_at)}`
+          : "Awaiting the first five-minute check",
     },
   ];
 });

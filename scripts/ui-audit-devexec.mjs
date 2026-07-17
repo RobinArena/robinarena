@@ -45,6 +45,7 @@ try {
   assert.match(publicDesktop.text, /\$100\.00/);
   assert.match(publicDesktop.text, /7 days/);
   assert.match(publicDesktop.text, /every 60 minutes/);
+  assert.match(publicDesktop.text, /Automation inactive/);
   assert.match(publicDesktop.text, /Robinhood/);
   assert.match(publicDesktop.text, /Inside the latest cycle/);
   assert.match(publicDesktop.text, /structured rationale/);
@@ -55,6 +56,7 @@ try {
   assert.match(adminDesktop.text, /\$25\.00/);
   assert.match(adminDesktop.text, /Run hourly during market hours/);
   assert.match(adminDesktop.text, /Weekly progress/);
+  assert.match(adminDesktop.text, /Scheduler/);
   assert.match(adminDesktop.text, /Connect Robinhood/);
   assert.match(adminDesktop.text, /Arm live execution/);
   assert.equal(adminDesktop.logoLoaded && adminMobile.logoLoaded, true);

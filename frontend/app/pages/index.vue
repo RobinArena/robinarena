@@ -24,6 +24,18 @@ const cycleTiming = computed(() => {
   if (!current.market_session_open) return "Next market session";
   return `Eligible ${formatRelativeTime(current.next_cycle_at)}`;
 });
+const schedulerState = computed(() => {
+  switch (data.value?.arena.scheduler_status) {
+    case "healthy":
+      return { label: "Scheduler online", positive: true };
+    case "delayed":
+      return { label: "Scheduler delayed", positive: false };
+    case "error":
+      return { label: "Scheduler needs attention", positive: false };
+    default:
+      return { label: "Automation inactive", positive: false };
+  }
+});
 const filteredDecisions = computed(() => {
   if (!data.value) return [];
   return selectedModel.value === "all"
@@ -170,6 +182,12 @@ onBeforeUnmount(pause);
               <dt>Market session</dt>
               <dd :class="data.arena.market_session_open ? 'value-positive' : ''">
                 {{ data.arena.market_session_open ? "US market open" : "US market closed" }}
+              </dd>
+            </div>
+            <div>
+              <dt>Automation</dt>
+              <dd :class="schedulerState.positive ? 'value-positive' : ''">
+                {{ schedulerState.label }}
               </dd>
             </div>
             <div>

@@ -29,10 +29,12 @@ import {
 } from "./openrouter";
 import {
   RobinhoodMcpClient,
+  robinhoodMcpConfigured,
   type RobinhoodOrderSnapshot,
   type RobinhoodPositionSnapshot,
   type RobinhoodQuote,
 } from "./robinhood-mcp";
+import { robinhoodOAuthStatus } from "./robinhood-oauth";
 import type {
   ArenaAction,
   ArenaDecisionSource,
@@ -51,6 +53,9 @@ const HARD_STOP_PCT = 5;
 const TAKE_PROFIT_PCT = 10;
 const MIN_ORDER_AMOUNT = 1;
 const QUANTITY_EPSILON = 0.000001;
+const SCHEDULER_STALE_CYCLE_MINUTES = 10;
+const SCHEDULER_RETRY_BASE_MINUTES = 5;
+const SCHEDULER_RETRY_MAX_MINUTES = 60;
 const TERMINAL_ORDER_STATES = new Set([
   "cancelled",
   "canceled",
@@ -120,6 +125,84 @@ type ProviderOutcome = ProviderSuccess | ProviderFailure;
 
 function errorText(cause: unknown): string {
   return (cause instanceof Error ? cause.message : String(cause)).slice(0, 500);
+}
+
+function schedulerExecutionEnabled(state: Awaited<ReturnType<typeof getArenaState>>): boolean {
+  return (
+    state.live_armed
+    && state.automation_enabled
+    && !state.halted
+    && state.status === "running"
+  );
+}
+
+function concurrentBrokerSync(cause: unknown): boolean {
+  return /reconciliation is already running/i.test(errorText(cause));
+}
+
+async function markSchedulerSeen(): Promise<void> {
+  await db.exec`
+    UPDATE arena_state SET scheduler_last_seen_at = now(), updated_at = now()
+    WHERE id = 1
+  `;
+}
+
+async function markSchedulerSuccess(): Promise<void> {
+  await db.exec`
+    UPDATE arena_state SET
+      scheduler_last_success_at = now(),
+      scheduler_consecutive_failures = 0,
+      scheduler_retry_at = NULL,
+      updated_at = now()
+    WHERE id = 1
+  `;
+}
+
+async function markSchedulerFailure(
+  cause: unknown,
+  retryCycle: boolean,
+): Promise<void> {
+  const state = await getArenaState();
+  const failures = Math.min(state.scheduler_consecutive_failures + 1, 1_000_000);
+  const retryMinutes = Math.min(
+    SCHEDULER_RETRY_MAX_MINUTES,
+    SCHEDULER_RETRY_BASE_MINUTES * (2 ** Math.min(failures - 1, 4)),
+  );
+  const retryAt = new Date(Date.now() + retryMinutes * 60 * 1000);
+  await db.exec`
+    UPDATE arena_state SET
+      scheduler_last_error_at = now(),
+      scheduler_last_error = ${errorText(cause)},
+      scheduler_consecutive_failures = ${failures},
+      scheduler_retry_at = ${retryAt},
+      next_cycle_at = CASE
+        WHEN ${retryCycle} THEN ${retryAt}
+        ELSE next_cycle_at
+      END,
+      updated_at = now()
+    WHERE id = 1
+  `;
+}
+
+async function recoverStaleCycle(): Promise<boolean> {
+  const recovered = await db.queryRow<{ id: number }>`
+    UPDATE arena_state SET
+      cycle_in_progress = false,
+      cycle_started_at = NULL,
+      next_cycle_at = now(),
+      scheduler_retry_at = NULL,
+      scheduler_recovery_count = scheduler_recovery_count + 1,
+      scheduler_last_recovery_at = now(),
+      updated_at = now()
+    WHERE id = 1
+      AND cycle_in_progress = true
+      AND (
+        cycle_started_at IS NULL
+        OR cycle_started_at < now() - (${SCHEDULER_STALE_CYCLE_MINUTES} * interval '1 minute')
+      )
+    RETURNING id
+  `;
+  return Boolean(recovered);
 }
 
 function brokerOrderFailure(
@@ -1487,7 +1570,9 @@ export async function armLiveArena(automationEnabled: boolean): Promise<BrokerAc
   }
   await db.exec`
     UPDATE arena_state SET live_armed = true, automation_enabled = ${automationEnabled},
-      halted = false, halt_reason = NULL, status = 'running', updated_at = now()
+      halted = false, halt_reason = NULL, status = 'running',
+      scheduler_consecutive_failures = 0, scheduler_retry_at = NULL,
+      updated_at = now()
     WHERE id = 1
   `;
   await db.exec`UPDATE arena_agents SET status = 'active', updated_at = now()`;
@@ -1571,22 +1656,77 @@ export async function flattenManagedPositions(): Promise<number> {
 }
 
 export async function scheduledLiveRound(): Promise<void> {
-  let state = await getArenaState();
-  let brokerSynced = false;
-  if (state.robinhood_oauth_connected) {
-    try {
-      await syncRobinhood();
-      brokerSynced = true;
-    } catch {
-      // The state records the sync error. Automated execution waits for a verified snapshot.
+  await markSchedulerSeen();
+  let cycleAttempted = false;
+  try {
+    await recoverStaleCycle();
+    let state = await getArenaState();
+    const executionEnabled = schedulerExecutionEnabled(state);
+    if (
+      executionEnabled
+      && state.scheduler_retry_at
+      && new Date(state.scheduler_retry_at).getTime() > Date.now()
+    ) {
+      return;
     }
+
+    const oauth = await robinhoodOAuthStatus();
+    const credentialsAvailable = oauth.connected || robinhoodMcpConfigured();
+    let brokerSynced = false;
+    let syncFailure: unknown;
+    if (credentialsAvailable) {
+      try {
+        await syncRobinhood();
+        brokerSynced = true;
+      } catch (cause) {
+        if (concurrentBrokerSync(cause)) {
+          if (state.scheduler_consecutive_failures === 0) await markSchedulerSuccess();
+          return;
+        }
+        syncFailure = cause;
+      }
+    }
+
+    await ensureWeeklyCompetition();
+    state = await getArenaState();
+    if (!schedulerExecutionEnabled(state)) {
+      await markSchedulerSuccess();
+      return;
+    }
+    if (!credentialsAvailable) {
+      throw new Error("Robinhood credentials are unavailable; reconnect the Agentic account");
+    }
+    if (syncFailure) throw syncFailure;
+    if (!brokerSynced) {
+      throw new Error("Robinhood did not provide a verified broker snapshot");
+    }
+    if (!regularMarketSessionOpen()) {
+      if (state.scheduler_consecutive_failures === 0) await markSchedulerSuccess();
+      return;
+    }
+    if (new Date(state.next_cycle_at).getTime() > Date.now()) {
+      await markSchedulerSuccess();
+      return;
+    }
+
+    cycleAttempted = true;
+    const result = await runLiveRound({ brokerAlreadySynced: true });
+    const attemptedModels = result.round_results.filter(
+      (entry) => entry.status !== "skipped",
+    );
+    if (
+      attemptedModels.length > 0
+      && attemptedModels.every((entry) => entry.status === "failed")
+    ) {
+      throw new Error("Every active model failed this decision cycle");
+    }
+    await markSchedulerSuccess();
+  } catch (cause) {
+    try {
+      await markSchedulerFailure(cause, cycleAttempted);
+    } catch {
+      // Preserve the original scheduler failure for cron monitoring.
+    }
+    throw cause;
   }
-  await ensureWeeklyCompetition();
-  state = await getArenaState();
-  if (!state.live_armed || !state.automation_enabled || state.halted || state.status !== "running") {
-    return;
-  }
-  if (!brokerSynced || !regularMarketSessionOpen()) return;
-  if (new Date(state.next_cycle_at).getTime() > Date.now()) return;
-  await runLiveRound({ brokerAlreadySynced: true });
 }

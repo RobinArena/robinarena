@@ -483,7 +483,7 @@ onBeforeUnmount(pause);
       <footer class="arena-footer">
         <div>
           <strong>Execution protocol</strong>
-          <p>OpenRouter returns one structured decision per model in each eligible cycle. Confidence, cash, position size, daily loss, and broker reconciliation gates run before any live order is reviewed.</p>
+          <p>OpenRouter returns one structured decision per model in each eligible cycle. An empty ledger must request a 20–40% opening position. Confidence, cash, position size, daily loss, and broker reconciliation gates run before any live order is reviewed.</p>
         </div>
         <dl>
           <div><dt>Round length</dt><dd>7 days</dd></div>

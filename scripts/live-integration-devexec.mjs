@@ -33,6 +33,7 @@ let oauthRegistrations = 0;
 let oauthCodeExchanges = 0;
 let oauthRefreshes = 0;
 const decisionInputs = [];
+const decisionSchemas = [];
 
 function cashBalance() {
   return orders.reduce((cash, order) => {
@@ -242,6 +243,7 @@ const openrouter = createServer(async (request, response) => {
   maxOpenRouterInFlight = Math.max(maxOpenRouterInFlight, openRouterInFlight);
   const payload = await body(request);
   decisionInputs.push(JSON.parse(payload.messages[1].content));
+  decisionSchemas.push(payload.response_format.json_schema.schema);
   openRouterRequests += 1;
   await new Promise((resolve) => setTimeout(resolve, 120));
   const symbol = modelSymbols[payload.model];
@@ -359,6 +361,24 @@ try {
   assert.equal(arena.arena.total_equity, 100);
   assert.equal(arena.arena.pending_orders, 0);
   assert.equal(maxOpenRouterInFlight, 4);
+  assert.equal(
+    decisionSchemas.slice(0, 4).every((schema) => (
+      schema.properties.action.enum.length === 1
+      && schema.properties.action.enum[0] === "buy"
+    )),
+    true,
+    "empty ledgers require an opening buy",
+  );
+  assert.equal(
+    decisionSchemas.every((schema) => (
+      !("minimum" in schema.properties.confidence)
+      && !("maximum" in schema.properties.confidence)
+      && !("minimum" in schema.properties.allocation_pct)
+      && !("maximum" in schema.properties.allocation_pct)
+    )),
+    true,
+    "provider-compatible structured output schema",
+  );
   assert.equal(toolCalls.get("review_equity_order"), 4);
   assert.equal(toolCalls.get("place_equity_order"), 4);
 
@@ -377,6 +397,11 @@ try {
   assert.equal(exited.decisions.filter((decision) => decision.cycle_number === 2).length, 4);
   assert.equal(exited.arena.total_equity, 100);
   assert.equal(exited.arena.pending_orders, 0);
+  assert.equal(
+    decisionSchemas.slice(4).every((schema) => schema.properties.action.enum.length === 3),
+    true,
+    "invested ledgers retain buy, sell, and hold choices",
+  );
   assert.equal(toolCalls.get("review_equity_order"), 8);
   assert.equal(toolCalls.get("place_equity_order"), 8);
 

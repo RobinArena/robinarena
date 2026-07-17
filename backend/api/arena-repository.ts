@@ -20,6 +20,8 @@ import type {
   BrokerAccountSummary,
   EquitySeries,
   MarketQuote,
+  SchedulerHealth,
+  SchedulerSummary,
 } from "./types";
 
 export const ARENA_UNIVERSE = ["AMZN", "META", "MSFT", "NVDA", "SPY", "TSLA"] as const;
@@ -94,6 +96,14 @@ export interface ArenaStateRow {
   robinhood_oauth_expires_at: Date | string | null;
   last_robinhood_sync_at: Date | string | null;
   robinhood_error: string | null;
+  scheduler_last_seen_at: Date | string | null;
+  scheduler_last_success_at: Date | string | null;
+  scheduler_last_error_at: Date | string | null;
+  scheduler_last_error: string | null;
+  scheduler_consecutive_failures: number;
+  scheduler_retry_at: Date | string | null;
+  scheduler_recovery_count: number;
+  scheduler_last_recovery_at: Date | string | null;
   last_round_at: Date | string;
   next_round_at: Date | string;
 }
@@ -573,6 +583,53 @@ export async function storedBrokerSummary(state?: ArenaStateRow): Promise<Broker
   };
 }
 
+function schedulerHealth(state: ArenaStateRow): SchedulerHealth {
+  if (
+    !state.live_armed
+    || !state.automation_enabled
+    || state.halted
+    || state.status !== "running"
+  ) {
+    return "inactive";
+  }
+  if (state.scheduler_consecutive_failures > 0) return "error";
+  const staleBefore = Date.now() - 15 * 60 * 1000;
+  const lastSeen = state.scheduler_last_seen_at
+    ? new Date(state.scheduler_last_seen_at).getTime()
+    : 0;
+  const lastSuccess = state.scheduler_last_success_at
+    ? new Date(state.scheduler_last_success_at).getTime()
+    : 0;
+  return lastSeen < staleBefore || lastSuccess < staleBefore ? "delayed" : "healthy";
+}
+
+export async function storedSchedulerSummary(
+  state?: ArenaStateRow,
+): Promise<SchedulerSummary> {
+  const current = state || await getArenaState();
+  return {
+    status: schedulerHealth(current),
+    last_seen_at: current.scheduler_last_seen_at
+      ? timestamp(current.scheduler_last_seen_at)
+      : undefined,
+    last_success_at: current.scheduler_last_success_at
+      ? timestamp(current.scheduler_last_success_at)
+      : undefined,
+    last_error_at: current.scheduler_last_error_at
+      ? timestamp(current.scheduler_last_error_at)
+      : undefined,
+    last_error: current.scheduler_last_error || undefined,
+    consecutive_failures: current.scheduler_consecutive_failures,
+    retry_at: current.scheduler_retry_at
+      ? timestamp(current.scheduler_retry_at)
+      : undefined,
+    recovery_count: current.scheduler_recovery_count,
+    last_recovery_at: current.scheduler_last_recovery_at
+      ? timestamp(current.scheduler_last_recovery_at)
+      : undefined,
+  };
+}
+
 export async function buildArena(): Promise<ArenaResponse> {
   const [
     state,
@@ -599,6 +656,7 @@ export async function buildArena(): Promise<ArenaResponse> {
   const totalEquity = models.reduce((sum, model) => sum + model.equity, 0);
   const totalPnl = totalEquity - startingCapital;
   const pendingOrders = orders.filter((order) => !order.reconciled_at).length;
+  const scheduler = await storedSchedulerSummary(state);
   return {
     arena: {
       title: state.title,
@@ -630,6 +688,9 @@ export async function buildArena(): Promise<ArenaResponse> {
       ),
       cycle_interval_minutes: DECISION_CYCLE_MINUTES,
       market_session_open: regularMarketSessionOpen(),
+      scheduler_status: scheduler.status,
+      scheduler_last_seen_at: scheduler.last_seen_at,
+      scheduler_last_success_at: scheduler.last_success_at,
       last_cycle_at: state.last_cycle_at ? timestamp(state.last_cycle_at) : undefined,
       next_cycle_at: timestamp(state.next_cycle_at),
       last_round_at: timestamp(state.competition_started_at),

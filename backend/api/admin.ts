@@ -1,6 +1,10 @@
 import { api, APIError } from "encore.dev/api";
 import { CronJob } from "encore.dev/cron";
-import { buildArena, storedBrokerSummary } from "./arena-repository";
+import {
+  buildArena,
+  storedBrokerSummary,
+  storedSchedulerSummary,
+} from "./arena-repository";
 import {
   FLATTEN_CONFIRMATION,
   LIVE_CONSENT_CONFIRMATION,
@@ -57,6 +61,7 @@ async function adminStatus(): Promise<AdminStatusResponse> {
     authenticated: true,
     arena: await buildArena(),
     broker: await storedBrokerSummary(),
+    scheduler: await storedSchedulerSummary(),
     robinhood_oauth: await robinhoodOAuthStatus(),
     execution_confirmation: LIVE_EXECUTION_CONFIRMATION,
     live_consent_confirmation: LIVE_CONSENT_CONFIRMATION,
@@ -187,7 +192,7 @@ export const scheduledArenaRound = api(
 );
 
 const _arenaSchedule = new CronJob("model-market-live-round", {
-  title: "Reconcile the weekly Model Market arena",
+  title: "Monitor and run the weekly Model Market arena",
   every: "5m",
   endpoint: scheduledArenaRound,
 });

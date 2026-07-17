@@ -333,11 +333,12 @@ onBeforeUnmount(pause);
               <h2 id="performance-heading">Return this week</h2>
               <p>Each line is indexed to its own weekly opening balance and changes only with reconciled broker data.</p>
             </div>
-            <div class="range-control" aria-label="Chart range">
+            <div class="range-control" role="group" aria-label="Chart range">
               <button
                 v-for="range in (['1D', '5D', 'ALL'] as const)"
                 :key="range"
                 type="button"
+                :aria-pressed="chartRange === range"
                 :class="{ 'is-active': chartRange === range }"
                 @click="chartRange = range"
               >

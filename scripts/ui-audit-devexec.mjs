@@ -156,6 +156,14 @@ async function auditAgentWorkspace() {
   assert.equal(await page.locator(".model-chart-line").count(), 4);
   const axisLabels = await page.locator(".chart-axis-label:not(.chart-time-label)").allTextContents();
   assert.ok(new Set(axisLabels).size > 1);
+  const rangeControls = page.locator(".range-control button");
+  for (const [index, range] of ["1D", "5D", "ALL"].entries()) {
+    await rangeControls.nth(index).click();
+    assert.equal(await rangeControls.nth(index).getAttribute("aria-pressed"), "true");
+    assert.equal(await page.locator(".model-chart-line").count(), 4);
+    assert.ok(new Set(await page.locator(".chart-time-label").allTextContents()).size > 0);
+    assert.equal((await rangeControls.allTextContents())[index]?.trim(), range);
+  }
 
   const roster = page.locator(".agent-roster-item");
   assert.equal(await roster.count(), 4);

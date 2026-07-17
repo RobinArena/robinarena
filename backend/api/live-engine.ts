@@ -122,6 +122,24 @@ function errorText(cause: unknown): string {
   return (cause instanceof Error ? cause.message : String(cause)).slice(0, 500);
 }
 
+function brokerOrderFailure(
+  action: "buy" | "sale",
+  cause: unknown,
+): { operatorMessage: string; publicMessage: string } {
+  const detail = errorText(cause);
+  const operatorMessage = `Robinhood rejected the live ${action}: ${detail}`;
+  if (/investing goals|investor profile/i.test(detail)) {
+    return {
+      operatorMessage,
+      publicMessage: "Robinhood requires the account’s investor goals questionnaire before another live order can be placed. Complete it in Robinhood and the next arena cycle can retry.",
+    };
+  }
+  return {
+    operatorMessage,
+    publicMessage: `Robinhood rejected the live ${action}. The private operator console contains the broker response.`,
+  };
+}
+
 function isTerminalOrder(status: string): boolean {
   return TERMINAL_ORDER_STATES.has(status.toLowerCase());
 }
@@ -1119,7 +1137,7 @@ async function executeBuy(
       message: riskNote,
     };
   } catch (cause) {
-    const message = `Robinhood rejected the live buy: ${errorText(cause)}`;
+    const failure = brokerOrderFailure("buy", cause);
     await insertDecision({
       roundNumber,
       agentId: agent.id,
@@ -1128,10 +1146,16 @@ async function executeBuy(
       confidence: decision.confidence,
       rationale: decision.rationale,
       proposedNotional: requestedNotional,
-      riskNote: message,
+      riskNote: failure.publicMessage,
       audit,
     });
-    return { agent_id: agent.id, model: result.model, status: "failed", action: "skip", message };
+    return {
+      agent_id: agent.id,
+      model: result.model,
+      status: "failed",
+      action: "skip",
+      message: failure.operatorMessage,
+    };
   }
 }
 
@@ -1215,7 +1239,7 @@ async function executeSell(
       message,
     };
   } catch (cause) {
-    const message = `Robinhood rejected the live sale: ${errorText(cause)}`;
+    const failure = brokerOrderFailure("sale", cause);
     await insertDecision({
       roundNumber,
       agentId: agent.id,
@@ -1223,10 +1247,16 @@ async function executeSell(
       action: "skip",
       confidence: decision.confidence,
       rationale: decision.rationale,
-      riskNote: message,
+      riskNote: failure.publicMessage,
       audit,
     });
-    return { agent_id: agent.id, model: result.model, status: "failed", action: "skip", message };
+    return {
+      agent_id: agent.id,
+      model: result.model,
+      status: "failed",
+      action: "skip",
+      message: failure.operatorMessage,
+    };
   }
 }
 

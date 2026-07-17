@@ -44,7 +44,7 @@ function requestedAction(decision: api.ArenaDecision): string {
 
       <template v-if="decision">
         <div class="agent-action-line">
-          <span class="decision-action" :class="`is-${decision.action}`">{{ decision.action }}</span>
+          <span class="decision-action" :class="`is-${decision.requested_action}`">{{ decision.requested_action }}</span>
           <strong>{{ decision.symbol }}</strong>
           <span>{{ Math.round(decision.confidence * 100) }}% confidence</span>
           <span>Cycle {{ decision.cycle_number }}</span>

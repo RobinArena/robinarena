@@ -35,7 +35,6 @@ export default defineNuxtConfig({
         "ph:arrows-clockwise",
         "ph:bank",
         "ph:brackets-curly",
-        "ph:broadcast",
         "ph:caret-down",
         "ph:check-circle",
         "ph:circle-notch",
@@ -80,6 +79,7 @@ export default defineNuxtConfig({
         },
       ],
       link: [
+        { rel: "icon", type: "image/svg+xml", href: "/brand/robinarena-mark.svg" },
         { rel: "icon", type: "image/x-icon", href: "/favicon.ico" },
         { rel: "icon", type: "image/png", sizes: "64x64", href: "/favicon.png" },
         { rel: "apple-touch-icon", sizes: "192x192", href: "/icon-192.png" },

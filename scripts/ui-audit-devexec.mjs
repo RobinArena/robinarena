@@ -30,7 +30,11 @@ async function auditPage(route, file, viewport, authenticated = false) {
   await page.waitForTimeout(500);
   await page.screenshot({ path: join(output, file), fullPage: true });
   const text = await page.locator("body").innerText();
-  const logoLoaded = await page.locator(".brand-mark img").evaluate((image) => image.complete && image.naturalWidth > 0);
+  const logoLoaded = await page.locator(".brand-mark svg").evaluate((svg) => (
+    svg.querySelectorAll("path").length === 4
+    && svg.getBoundingClientRect().width > 0
+    && svg.getBoundingClientRect().height > 0
+  ));
   const xProfileHref = await page.locator('a[href="https://x.com/RobinArenaFun"]').first().getAttribute("href");
   const fontFamily = await page.locator("body").evaluate((element) => getComputedStyle(element).fontFamily);
   const horizontalOverflow = await page.evaluate(() => (
@@ -175,6 +179,23 @@ async function auditAgentWorkspace() {
 
   const pageFont = await page.locator("body").evaluate((element) => getComputedStyle(element).fontFamily);
   assert.match(pageFont, /Onest/);
+  for (const selector of [
+    ".summary-metric strong",
+    ".leaderboard-equity strong",
+    ".model-stats dd",
+    ".data-table td",
+  ]) {
+    const element = page.locator(selector).first();
+    if (await element.count()) {
+      assert.match(
+        await element.evaluate((node) => getComputedStyle(node).fontFamily),
+        /Onest/,
+      );
+    }
+  }
+  assert.equal(await page.locator(".leaderboard-rank, .model-rank").count(), 0);
+  assert.equal(await page.locator(".live-feed-state, .round-panel").count(), 0);
+  assert.equal(await page.locator(".round-scoreboard").count(), 1);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   assert.ok(overflow <= 1, `Desktop overflowed by ${overflow}px`);
 
@@ -216,13 +237,16 @@ try {
   assert.match(publicDesktop.text, /@RobinArenaFun/);
   assert.match(publicDesktop.text, /\$25\.00/);
   assert.match(publicDesktop.text, /\$100\.00/);
-  assert.match(publicDesktop.text, /7 days/);
-  assert.match(publicDesktop.text, /every 60 minutes/);
-  assert.match(publicDesktop.text, /Automation inactive/);
+  assert.match(publicDesktop.text, /\d+d \d+h left/);
+  assert.match(publicDesktop.text, /Every 60 min/);
+  assert.match(publicDesktop.text, /Disarmed/);
   assert.match(publicDesktop.text, /Robinhood/);
   assert.match(publicDesktop.text, /Inside the latest cycle/);
   assert.match(publicDesktop.text, /Choose a model to inspect its published reasoning/);
-  assert.match(publicDesktop.text, /Live feed connected/);
+  assert.doesNotMatch(
+    publicDesktop.text,
+    /Live feed connected|Public data refreshes every 20 seconds|Robinhood reconciled/,
+  );
   assert.doesNotMatch(publicDesktop.text, /Open operator console|\bAdmin\b/);
   assert.equal(publicDesktop.xProfileHref, "https://x.com/RobinArenaFun");
   assert.doesNotMatch(publicDesktop.text, /\$1,000|\$250|\$100K|paper fills|replay tape/i);

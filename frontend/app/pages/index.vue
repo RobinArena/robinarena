@@ -38,40 +38,28 @@ const cycleTiming = computed(() => {
   if (!current.market_session_open) return "Next market session";
   return `Eligible ${formatRelativeTime(current.next_cycle_at)}`;
 });
-const schedulerState = computed(() => {
+const automationLabel = computed(() => {
   switch (data.value?.arena.scheduler_status) {
     case "healthy":
-      return { label: "Scheduler online", positive: true };
+      return "Automated";
     case "delayed":
-      return { label: "Scheduler delayed", positive: false };
+      return "Delayed";
     case "error":
-      return { label: "Scheduler needs attention", positive: false };
+      return "Needs attention";
     default:
-      return { label: "Automation inactive", positive: false };
+      return "Manual";
   }
 });
-const liveFeedState = computed(() => {
-  if (!isOnline.value) {
-    return {
-      label: "Browser offline",
-      detail: "Showing the last verified arena snapshot. Refresh resumes when this device reconnects.",
-      healthy: false,
-    };
-  }
-  if (error.value) {
-    return {
-      label: "Live refresh delayed",
-      detail: "Showing the last verified arena snapshot while the next refresh retries.",
-      healthy: false,
-    };
-  }
-  return {
-    label: "Live feed connected",
-    detail: data.value?.arena.last_robinhood_sync_at
-      ? `Robinhood reconciled ${formatRelativeTime(data.value.arena.last_robinhood_sync_at)}. Public data refreshes every 20 seconds.`
-      : "Public data refreshes every 20 seconds while Robinhood prepares its first verified snapshot.",
-    healthy: true,
-  };
+const roundTimeLeft = computed(() => {
+  const endsAt = data.value?.arena.round_ends_at;
+  if (!endsAt) return "Pending";
+  const generatedAt = data.value?.generated_at;
+  const referenceTime = generatedAt ? Date.parse(generatedAt) : Date.now();
+  const remaining = Math.max(0, Date.parse(endsAt) - referenceTime);
+  if (remaining === 0) return "Round complete";
+  const days = Math.floor(remaining / (24 * 60 * 60 * 1000));
+  const hours = Math.floor((remaining % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+  return days > 0 ? `${days}d ${hours}h left` : `${Math.max(hours, 1)}h left`;
 });
 const filteredDecisions = computed(() => {
   if (!data.value) return [];
@@ -114,7 +102,7 @@ const summaryMetrics = computed(() => data.value ? [
   },
   {
     label: "Open positions",
-    value: String(data.value.arena.open_positions).padStart(2, "0"),
+    value: String(data.value.arena.open_positions),
     detail: `${data.value.arena.pending_orders} broker orders awaiting reconciliation`,
     tone: "neutral",
   },
@@ -200,86 +188,70 @@ onBeforeUnmount(pause);
         <div class="hero-copy">
           <h1>Four models. One trading week.</h1>
           <p>
-            RobinArena puts GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 into isolated ledgers under a {{ formatCurrency(data.arena.operator_capital_ceiling) }} operator ceiling. Robinhood reports the deployable balance and executes approved orders. OpenRouter carries every decision.
+            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 each control a separate {{ formatCurrency(data.arena.allocation_per_model) }} ledger. OpenRouter carries their decisions; Robinhood supplies the cash, positions, and fills.
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="#decisions">
-              <Icon name="ph:brain" aria-hidden="true" />
               Read model rationale
             </a>
             <a class="button button-quiet" href="#ledger">
               Follow live execution
               <Icon name="ph:arrow-down" aria-hidden="true" />
             </a>
-            <a
-              class="button button-social"
-              href="https://x.com/RobinArenaFun"
-              target="_blank"
-              rel="me noopener noreferrer"
-            >
-              <Icon name="ph:x-logo" aria-hidden="true" />
-              Follow RobinArena on X
-            </a>
           </div>
         </div>
 
-        <aside class="round-panel" aria-labelledby="round-heading">
-          <div class="round-panel-head">
+        <aside class="round-scoreboard" aria-labelledby="round-heading">
+          <div class="round-scoreboard-head">
             <div>
-              <span>{{ data.arena.season }}</span>
-              <h2 id="round-heading">Round {{ data.arena.round_number }}</h2>
+              <span>Round {{ data.arena.round_number }}</span>
+              <h2 id="round-heading">{{ roundTimeLeft }}</h2>
             </div>
-            <span class="round-status">
-              <Icon :name="data.arena.halted ? 'ph:stop-circle' : 'ph:timer'" aria-hidden="true" />
-              {{ data.arena.halted ? "halted" : "week in progress" }}
-            </span>
+            <strong :class="{ 'is-halted': data.arena.halted }">
+              {{ data.arena.halted ? "Halted" : "In progress" }}
+            </strong>
           </div>
-          <div class="round-progress">
-            <div>
-              <span>Round progress</span>
-              <strong>{{ Math.round(data.arena.round_progress_pct) }}%</strong>
-            </div>
-            <span class="round-progress-track" aria-hidden="true">
-              <i :style="{ width: `${data.arena.round_progress_pct}%` }" />
-            </span>
-            <small>{{ formatDateTime(data.arena.round_started_at) }} to {{ formatDateTime(data.arena.round_ends_at) }}</small>
+
+          <div
+            class="round-scoreboard-progress"
+            role="progressbar"
+            aria-label="Round progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="Math.round(data.arena.round_progress_pct)"
+          >
+            <span :style="{ width: `${data.arena.round_progress_pct}%` }" />
           </div>
-          <dl class="round-details">
+          <div class="round-scoreboard-dates">
+            <span>{{ formatDateTime(data.arena.round_started_at) }}</span>
+            <span>{{ Math.round(data.arena.round_progress_pct) }}% elapsed</span>
+            <span>{{ formatDateTime(data.arena.round_ends_at) }}</span>
+          </div>
+
+          <dl class="round-scoreboard-grid">
             <div>
-              <dt>Round closes</dt>
-              <dd>{{ formatRelativeTime(data.arena.round_ends_at) }}</dd>
+              <dt>Capital ceiling</dt>
+              <dd>{{ formatCurrency(data.arena.operator_capital_ceiling) }}</dd>
             </div>
             <div>
-              <dt>Decision cycle</dt>
-              <dd>#{{ data.arena.cycle_number }} · every {{ data.arena.cycle_interval_minutes }} minutes</dd>
+              <dt>Decision cadence</dt>
+              <dd>Every {{ data.arena.cycle_interval_minutes }} min</dd>
             </div>
             <div>
               <dt>Next decision</dt>
               <dd>{{ cycleTiming }}</dd>
             </div>
             <div>
-              <dt>Market session</dt>
-              <dd :class="data.arena.market_session_open ? 'value-positive' : ''">
-                {{ data.arena.market_session_open ? "US market open" : "US market closed" }}
-              </dd>
-            </div>
-            <div>
-              <dt>Automation</dt>
-              <dd :class="schedulerState.positive ? 'value-positive' : ''">
-                {{ schedulerState.label }}
-              </dd>
-            </div>
-            <div>
-              <dt>Live execution</dt>
-              <dd :class="data.arena.live_armed ? 'value-positive' : ''">
-                {{ data.arena.halted ? "Halted" : data.arena.live_armed ? "Armed" : "Disarmed" }}
+              <dt>Execution</dt>
+              <dd :class="data.arena.live_armed && !data.arena.halted ? 'value-positive' : ''">
+                {{ data.arena.halted ? "Halted" : data.arena.live_armed ? automationLabel : "Disarmed" }}
               </dd>
             </div>
           </dl>
-          <div class="round-rule">
-            <Icon name="ph:shield-check" aria-hidden="true" />
-            <p>{{ formatCurrency(data.arena.broker_equity ?? data.arena.capital_limit) }} broker equity verified against a {{ formatCurrency(data.arena.operator_capital_ceiling) }} operator ceiling. This week’s four ledger baselines total {{ formatCurrency(data.arena.starting_capital) }}.</p>
-          </div>
+
+          <p class="round-scoreboard-foot">
+            {{ formatCurrency(data.arena.broker_equity ?? data.arena.capital_limit) }} verified broker equity across four isolated portfolios.
+          </p>
         </aside>
       </header>
 
@@ -289,33 +261,6 @@ onBeforeUnmount(pause);
           <h2 id="market-state-heading">Waiting for a verified Robinhood snapshot</h2>
           <p>The public arena remains empty until the operator reconciles the dedicated Agentic account.</p>
         </div>
-      </section>
-
-      <section
-        class="live-feed-state"
-        :class="{ 'is-degraded': !liveFeedState.healthy }"
-        :aria-live="liveFeedState.healthy ? 'off' : 'polite'"
-      >
-        <Icon
-          :name="liveFeedState.healthy ? 'ph:broadcast' : 'ph:warning-circle'"
-          aria-hidden="true"
-        />
-        <div>
-          <strong>{{ liveFeedState.label }}</strong>
-          <span>{{ liveFeedState.detail }}</span>
-        </div>
-        <button
-          type="button"
-          :disabled="isRefreshing || !isOnline"
-          @click="refreshArena"
-        >
-          <Icon
-            :name="isRefreshing ? 'ph:circle-notch' : 'ph:arrows-clockwise'"
-            :class="{ 'is-spinning': isRefreshing }"
-            aria-hidden="true"
-          />
-          {{ isRefreshing ? "Refreshing" : "Refresh now" }}
-        </button>
       </section>
 
       <section class="summary-grid" aria-label="Arena summary">
@@ -358,9 +303,7 @@ onBeforeUnmount(pause);
           <div class="panel-heading is-compact">
             <div>
               <h2 id="leaderboard-heading">Leaderboard</h2>
-              <p>Open a model’s latest live session.</p>
             </div>
-            <Icon name="ph:ranking" aria-hidden="true" />
           </div>
           <ModelLeaderboard
             :models="data.models"
@@ -374,8 +317,6 @@ onBeforeUnmount(pause);
         <div class="tape-heading">
           <Icon name="ph:wave-sine" aria-hidden="true" />
           <span>Robinhood snapshot</span>
-          <small v-if="data.arena.last_robinhood_sync_at">Synced {{ formatRelativeTime(data.arena.last_robinhood_sync_at) }}</small>
-          <small v-else>Awaiting first sync</small>
         </div>
         <article v-for="quote in data.market" :key="quote.symbol" class="quote-item">
           <div>
@@ -402,7 +343,7 @@ onBeforeUnmount(pause);
           </div>
           <div class="section-fact">
             <span>Decision cycle</span>
-            <strong>#{{ data.arena.cycle_number }}</strong>
+            <strong>Cycle {{ data.arena.cycle_number }}</strong>
           </div>
         </div>
         <AgentActivityBoard
@@ -437,11 +378,10 @@ onBeforeUnmount(pause);
           >
             <div class="model-card-head">
               <ModelGlyph :code="model.code" :accent="model.accent" size="large" />
-              <span class="model-rank">Rank {{ String(model.rank).padStart(2, "0") }}</span>
+              <span>{{ model.provider }}</span>
             </div>
             <div class="model-title">
               <h3>{{ model.name }}</h3>
-              <span>{{ model.provider }}</span>
             </div>
             <strong class="model-strategy">{{ model.strategy }}</strong>
             <p>{{ model.thesis }}</p>
@@ -463,11 +403,7 @@ onBeforeUnmount(pause);
                 <dd>{{ formatCurrency(model.cash_balance) }}</dd>
               </div>
             </dl>
-            <div class="return-track" aria-hidden="true">
-              <span :style="{ width: `${Math.min(Math.max(Math.abs(model.return_pct) * 8, 5), 100)}%` }" />
-            </div>
             <div class="model-card-foot">
-              <span class="model-route">{{ model.openrouter_model }}</span>
               <button type="button" @click="inspectAgent(model.id)">
                 Open agent session
                 <Icon name="ph:arrow-down-right" aria-hidden="true" />

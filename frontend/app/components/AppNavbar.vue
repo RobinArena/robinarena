@@ -18,11 +18,10 @@ const themeToggleLabel = computed(() => (
     <div class="shell header-inner">
       <NuxtLink class="brand" to="/" aria-label="RobinArena home">
         <span class="brand-mark" aria-hidden="true">
-          <img :src="'/brand/model-market-mark.png'" alt="">
+          <RobinArenaMark />
         </span>
         <span class="brand-copy">
           <strong>RobinArena</strong>
-          <small>LLM trading arena</small>
         </span>
       </NuxtLink>
 

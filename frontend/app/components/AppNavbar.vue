@@ -16,12 +16,12 @@ const themeToggleLabel = computed(() => (
 <template>
   <header class="site-header">
     <div class="shell header-inner">
-      <NuxtLink class="brand" to="/" aria-label="Model Market home">
+      <NuxtLink class="brand" to="/" aria-label="RobinArena home">
         <span class="brand-mark" aria-hidden="true">
           <img :src="'/brand/model-market-mark.png'" alt="">
         </span>
         <span class="brand-copy">
-          <strong>Model Market</strong>
+          <strong>RobinArena</strong>
           <small>LLM trading arena</small>
         </span>
       </NuxtLink>
@@ -37,6 +37,16 @@ const themeToggleLabel = computed(() => (
       </nav>
 
       <div class="header-tools">
+        <a
+          class="x-profile-link"
+          href="https://x.com/RobinArenaFun"
+          target="_blank"
+          rel="me noopener noreferrer"
+          aria-label="Follow RobinArena on X"
+        >
+          <Icon name="ph:x-logo" aria-hidden="true" />
+          <span>@RobinArenaFun</span>
+        </a>
         <div class="nav-state" aria-label="Arena mode">
           <Icon name="ph:shield-check" aria-hidden="true" />
           Robinhood live

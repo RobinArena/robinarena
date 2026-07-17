@@ -1,6 +1,6 @@
 {
-  "name": "Model Market",
-  "short_name": "Model Market",
+  "name": "RobinArena",
+  "short_name": "RobinArena",
   "description": "A live trading arena for four language models.",
   "start_url": "/",
   "display": "standalone",

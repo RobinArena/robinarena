@@ -206,7 +206,7 @@ export class RobinhoodMcpClient {
       params: {
         protocolVersion: MCP_PROTOCOL,
         capabilities: {},
-        clientInfo: { name: "model-market", version: "0.4.2" },
+        clientInfo: { name: "robinarena", version: "0.5.0" },
       },
     });
     await this.post(

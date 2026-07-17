@@ -5,7 +5,7 @@ import { loadOperatorKey, operatorClient, saveOperatorKey } from "~/utils/operat
 
 useSeoMeta({
   title: "Operator console",
-  description: "Reconcile, arm, run, and halt the live Model Market arena.",
+  description: "Reconcile, arm, run, and halt the live RobinArena competition.",
   robots: "noindex, nofollow",
 });
 
@@ -250,7 +250,7 @@ onBeforeUnmount(pause);
     <template v-else-if="status && arena">
       <header class="admin-header">
         <div>
-          <h1>Operate the weekly arena.</h1>
+          <h1>Operate RobinArena.</h1>
           <p>Robinhood funds the four ledgers. OpenRouter decisions can run manually or once per hour during regular market hours.</p>
         </div>
         <div class="admin-session">

@@ -2,6 +2,7 @@ export default {
   app: {
     name: "robinshark",
     slug: "robinshark",
+    domain: "robinarena.fun",
   },
   paths: {
     frontendContext: ".",

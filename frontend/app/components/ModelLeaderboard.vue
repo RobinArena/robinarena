@@ -23,7 +23,6 @@ const emit = defineEmits<{
       :aria-pressed="selectedId === model.id"
       @click="emit('select', model.id)"
     >
-      <span class="leaderboard-rank">{{ String(model.rank).padStart(2, "0") }}</span>
       <ModelGlyph :code="model.code" :accent="model.accent" size="small" />
       <span class="leaderboard-model">
         <strong>{{ model.name }}</strong>

@@ -5,6 +5,10 @@ import { formatClock, formatCurrency } from "~/utils/format";
 defineProps<{
   decisions: api.ArenaDecision[];
 }>();
+
+const emit = defineEmits<{
+  inspect: [id: string];
+}>();
 </script>
 
 <template>
@@ -13,32 +17,31 @@ defineProps<{
       <ModelGlyph :code="decision.agent_code" :accent="decision.agent_accent" size="small" />
       <div class="decision-body">
         <div class="decision-meta">
-          <strong>{{ decision.agent_name }}</strong>
-          <span class="decision-action" :class="`is-${decision.action}`">{{ decision.action }}</span>
-          <span>{{ decision.symbol }}</span>
-          <time :datetime="decision.created_at">{{ formatClock(decision.created_at) }}</time>
+          <div>
+            <strong>{{ decision.agent_name }}</strong>
+            <span class="decision-action" :class="`is-${decision.action}`">{{ decision.action }}</span>
+            <span>{{ decision.symbol }}</span>
+          </div>
+          <time :datetime="decision.created_at">{{ formatClock(decision.created_at) }} ET</time>
         </div>
         <p>{{ decision.rationale }}</p>
-        <small>{{ decision.risk_note }}</small>
+        <p class="decision-risk">
+          <Icon :name="decision.approved ? 'ph:shield-check' : 'ph:shield-warning'" aria-hidden="true" />
+          {{ decision.risk_note }}
+        </p>
         <div class="decision-facts">
           <span>Requested {{ decision.requested_action }} {{ decision.requested_allocation_pct.toFixed(0) }}%</span>
           <span>Proposed {{ formatCurrency(decision.proposed_notional) }}</span>
           <span>Executed {{ decision.executed_notional > 0 ? formatCurrency(decision.executed_notional) : "none" }}</span>
         </div>
-        <div v-if="decision.source === 'openrouter'" class="decision-provider">
-          <Icon name="ph:circles-three-plus" aria-hidden="true" />
-          <span>{{ decision.provider_model || "OpenRouter" }}</span>
-          <span v-if="decision.latency_ms">{{ (decision.latency_ms / 1000).toFixed(1) }}s</span>
-          <span v-if="decision.prompt_tokens || decision.completion_tokens">
-            {{ (decision.prompt_tokens || 0) + (decision.completion_tokens || 0) }} tokens
-          </span>
-          <span v-if="decision.generation_cost !== undefined">${{ decision.generation_cost.toFixed(4) }}</span>
-          <span v-if="decision.provider_request_id" class="decision-request" :title="decision.provider_request_id">
-            {{ decision.provider_request_id }}
-          </span>
-        </div>
+        <button class="decision-open" type="button" @click="emit('inspect', decision.agent_id)">
+          Open agent session
+          <Icon name="ph:arrow-up-right" aria-hidden="true" />
+        </button>
       </div>
-      <span class="decision-confidence">{{ Math.round(decision.confidence * 100) }}</span>
+      <span class="decision-confidence" :aria-label="`${Math.round(decision.confidence * 100)} percent confidence`">
+        {{ Math.round(decision.confidence * 100) }}%
+      </span>
     </article>
   </div>
   <div v-else class="empty-state is-compact">

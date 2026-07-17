@@ -23,7 +23,11 @@ const { data, error, status, refresh } = await useAsyncData(
 
 const chartRange = ref<"1D" | "5D" | "ALL">("ALL");
 const selectedModel = ref("all");
+const selectedAgent = ref(data.value?.models[0]?.id || "");
 const ledgerView = ref<"positions" | "orders" | "trades">("positions");
+const isRefreshing = ref(false);
+const isOnline = useOnline();
+const documentVisibility = useDocumentVisibility();
 
 const leader = computed(() => data.value?.models[0]);
 const cycleTiming = computed(() => {
@@ -45,6 +49,29 @@ const schedulerState = computed(() => {
     default:
       return { label: "Automation inactive", positive: false };
   }
+});
+const liveFeedState = computed(() => {
+  if (!isOnline.value) {
+    return {
+      label: "Browser offline",
+      detail: "Showing the last verified arena snapshot. Refresh resumes when this device reconnects.",
+      healthy: false,
+    };
+  }
+  if (error.value) {
+    return {
+      label: "Live refresh delayed",
+      detail: "Showing the last verified arena snapshot while the next refresh retries.",
+      healthy: false,
+    };
+  }
+  return {
+    label: "Live feed connected",
+    detail: data.value?.arena.last_robinhood_sync_at
+      ? `Robinhood reconciled ${formatRelativeTime(data.value.arena.last_robinhood_sync_at)}. Public data refreshes every 20 seconds.`
+      : "Public data refreshes every 20 seconds while Robinhood prepares its first verified snapshot.",
+    healthy: true,
+  };
 });
 const filteredDecisions = computed(() => {
   if (!data.value) return [];
@@ -99,18 +126,51 @@ const summaryMetrics = computed(() => data.value ? [
   },
 ] : []);
 
-function refreshArena() {
-  return refresh();
-}
+watch(
+  () => data.value?.models.map((model) => model.id).join(","),
+  () => {
+    if (!data.value?.models.some((model) => model.id === selectedAgent.value)) {
+      selectedAgent.value = data.value?.models[0]?.id || "";
+    }
+  },
+  { immediate: true },
+);
 
-function inspectModel(id: string) {
-  selectedModel.value = id;
-  if (import.meta.client) {
-    document.getElementById("ledger")?.scrollIntoView({ behavior: "smooth", block: "start" });
+async function refreshArena(): Promise<void> {
+  if (isRefreshing.value || !isOnline.value) return;
+  isRefreshing.value = true;
+  try {
+    await refresh();
+  } finally {
+    isRefreshing.value = false;
   }
 }
 
-const { pause, resume } = useIntervalFn(() => refresh(), 30_000, { immediate: false });
+function inspectAgent(id: string) {
+  selectAgent(id);
+  if (import.meta.client) {
+    document.getElementById("agent-workspace")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function selectAgent(id: string) {
+  selectedAgent.value = id;
+}
+
+const { pause, resume } = useIntervalFn(() => {
+  if (documentVisibility.value === "visible") void refreshArena();
+}, 20_000, { immediate: false });
+
+watch([isOnline, documentVisibility], ([online, visibility], [wasOnline, wasVisibility]) => {
+  if (
+    online
+    && visibility === "visible"
+    && (!wasOnline || wasVisibility !== "visible")
+  ) {
+    void refreshArena();
+  }
+});
+
 onMounted(() => {
   resume();
 });
@@ -119,7 +179,7 @@ onBeforeUnmount(pause);
 
 <template>
   <div class="page-shell arena-page">
-    <section v-if="error" class="state-message" role="alert">
+    <section v-if="error && !data" class="state-message" role="alert">
       <Icon name="ph:warning-circle" aria-hidden="true" />
       <div>
         <h1>The RobinArena ledger is unavailable</h1>
@@ -231,6 +291,33 @@ onBeforeUnmount(pause);
         </div>
       </section>
 
+      <section
+        class="live-feed-state"
+        :class="{ 'is-degraded': !liveFeedState.healthy }"
+        :aria-live="liveFeedState.healthy ? 'off' : 'polite'"
+      >
+        <Icon
+          :name="liveFeedState.healthy ? 'ph:broadcast' : 'ph:warning-circle'"
+          aria-hidden="true"
+        />
+        <div>
+          <strong>{{ liveFeedState.label }}</strong>
+          <span>{{ liveFeedState.detail }}</span>
+        </div>
+        <button
+          type="button"
+          :disabled="isRefreshing || !isOnline"
+          @click="refreshArena"
+        >
+          <Icon
+            :name="isRefreshing ? 'ph:circle-notch' : 'ph:arrows-clockwise'"
+            :class="{ 'is-spinning': isRefreshing }"
+            aria-hidden="true"
+          />
+          {{ isRefreshing ? "Refreshing" : "Refresh now" }}
+        </button>
+      </section>
+
       <section class="summary-grid" aria-label="Arena summary">
         <article v-for="metric in summaryMetrics" :key="metric.label" class="summary-metric">
           <span>{{ metric.label }}</span>
@@ -265,14 +352,14 @@ onBeforeUnmount(pause);
           <div class="panel-heading is-compact">
             <div>
               <h2 id="leaderboard-heading">Leaderboard</h2>
-              <p>Click a model to filter the ledger.</p>
+              <p>Open a model’s latest live session.</p>
             </div>
             <Icon name="ph:ranking" aria-hidden="true" />
           </div>
           <ModelLeaderboard
             :models="data.models"
-            :selected-id="selectedModel"
-            @select="selectedModel = $event"
+            :selected-id="selectedAgent"
+            @select="inspectAgent"
           />
         </aside>
       </section>
@@ -301,18 +388,25 @@ onBeforeUnmount(pause);
         </div>
       </section>
 
-      <section id="decisions" class="activity-section section-anchor" aria-labelledby="activity-heading">
+      <section id="agent-workspace" class="activity-section section-anchor" aria-labelledby="activity-heading">
         <div class="section-heading">
           <div>
             <h2 id="activity-heading">Inside the latest cycle</h2>
-            <p>Each model publishes a concise structured rationale with its requested action. The risk engine then records what was approved and what reached Robinhood.</p>
+            <p>Choose a model to inspect its published reasoning, requested action, risk response, and Robinhood result.</p>
           </div>
           <div class="section-fact">
             <span>Decision cycle</span>
             <strong>#{{ data.arena.cycle_number }}</strong>
           </div>
         </div>
-        <AgentActivityBoard :models="data.models" :decisions="data.decisions" />
+        <AgentActivityBoard
+          :models="data.models"
+          :decisions="data.decisions"
+          :orders="data.orders"
+          :positions="data.positions"
+          :selected-id="selectedAgent"
+          @select="selectAgent"
+        />
       </section>
 
       <section id="models" class="models-section section-anchor" aria-labelledby="models-heading">
@@ -368,8 +462,8 @@ onBeforeUnmount(pause);
             </div>
             <div class="model-card-foot">
               <span class="model-route">{{ model.openrouter_model }}</span>
-              <button type="button" @click="inspectModel(model.id)">
-                Inspect ledger
+              <button type="button" @click="inspectAgent(model.id)">
+                Open agent session
                 <Icon name="ph:arrow-down-right" aria-hidden="true" />
               </button>
             </div>
@@ -392,7 +486,7 @@ onBeforeUnmount(pause);
               </select>
             </label>
           </div>
-          <ArenaDecisionFeed :decisions="filteredDecisions" />
+          <ArenaDecisionFeed :decisions="filteredDecisions" @inspect="inspectAgent" />
         </div>
 
         <div class="panel ledger-panel">

@@ -144,7 +144,7 @@ function setHover(event: PointerEvent) {
         :style="{ left: `${hover.left}%` }"
       >
         <time :datetime="hover.timestamp">
-          {{ new Date(hover.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) }}
+          {{ new Date(hover.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" }) }}
         </time>
         <div v-for="item in hover.entries" :key="item.name">
           <span class="legend-swatch" :style="{ background: item.accent }" />

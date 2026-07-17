@@ -1,3 +1,5 @@
+const MARKET_TIME_ZONE = "America/New_York";
+
 export function formatCurrency(value: number, compact = false): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -50,6 +52,7 @@ export function formatClock(value: string): string {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone: MARKET_TIME_ZONE,
   }).format(new Date(value));
 }
 
@@ -59,5 +62,7 @@ export function formatDateTime(value: string): string {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: MARKET_TIME_ZONE,
+    timeZoneName: "short",
   }).format(new Date(value));
 }

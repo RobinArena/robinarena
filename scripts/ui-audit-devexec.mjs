@@ -125,6 +125,38 @@ async function auditAgentWorkspace() {
   await page.waitForSelector(".agent-workspace", { timeout: 10_000 });
   await page.waitForTimeout(500);
 
+  const providerSources = await page.locator(".model-glyph img").evaluateAll((images) => (
+    [...new Set(images.map((image) => new URL(image.getAttribute("src"), location.href).pathname))]
+  ));
+  assert.deepEqual(providerSources.sort(), [
+    "/providers/claude.svg",
+    "/providers/deepseek.png",
+    "/providers/openai.png",
+    "/providers/xai.png",
+  ]);
+  assert.equal(
+    await page.locator(".model-glyph img").evaluateAll((images) => (
+      images.every((image) => image.complete && image.naturalWidth > 0)
+    )),
+    true,
+  );
+
+  const portfolioLanes = page.locator(".portfolio-lane");
+  const portfolioLaneCount = await portfolioLanes.count();
+  assert.equal(portfolioLaneCount, 4);
+  const seriesControls = page.locator(".chart-series-controls button");
+  assert.equal(await seriesControls.count(), 5);
+  await seriesControls.nth(2).click();
+  assert.equal(await page.locator(".model-chart-line").count(), 1);
+  assert.match(
+    await page.locator(".chart-plot-stage > svg").getAttribute("aria-label"),
+    /Return history for/,
+  );
+  await seriesControls.first().click();
+  assert.equal(await page.locator(".model-chart-line").count(), 4);
+  const axisLabels = await page.locator(".chart-axis-label:not(.chart-time-label)").allTextContents();
+  assert.ok(new Set(axisLabels).size > 1);
+
   const roster = page.locator(".agent-roster-item");
   assert.equal(await roster.count(), 4);
   const target = roster.nth(1);
@@ -151,7 +183,12 @@ async function auditAgentWorkspace() {
   }
 
   await context.close();
-  return { selectedAgent: expectedName, pageFont };
+  return {
+    selectedAgent: expectedName,
+    pageFont,
+    providerAssets: providerSources,
+    portfolioLanes: portfolioLaneCount,
+  };
 }
 
 async function expectText(locator, pattern) {

@@ -3,6 +3,7 @@ const { mkdir } = await import("node:fs/promises");
 const { join } = await import("node:path");
 
 const output = join(root, ".nstack", "screenshots");
+const operatorKey = "dev-model-market";
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const failures = [];
@@ -10,9 +11,9 @@ const failures = [];
 async function auditPage(route, file, viewport, authenticated = false) {
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
   if (authenticated) {
-    await context.addInitScript(() => {
-      sessionStorage.setItem("model-market-operator-key", "ui-operator");
-    });
+    await context.addInitScript((key) => {
+      sessionStorage.setItem("model-market-operator-key", key);
+    }, operatorKey);
   }
   const page = await context.newPage();
   page.on("pageerror", (error) => failures.push(`${route}: ${error.message}`));
@@ -31,8 +32,12 @@ async function auditPage(route, file, viewport, authenticated = false) {
   const text = await page.locator("body").innerText();
   const logoLoaded = await page.locator(".brand-mark img").evaluate((image) => image.complete && image.naturalWidth > 0);
   const xProfileHref = await page.locator('a[href="https://x.com/RobinArenaFun"]').first().getAttribute("href");
+  const fontFamily = await page.locator("body").evaluate((element) => getComputedStyle(element).fontFamily);
+  const horizontalOverflow = await page.evaluate(() => (
+    document.documentElement.scrollWidth - document.documentElement.clientWidth
+  ));
   await context.close();
-  return { text, logoLoaded, xProfileHref };
+  return { text, logoLoaded, xProfileHref, fontFamily, horizontalOverflow };
 }
 
 async function auditThemeSwitch() {
@@ -75,9 +80,9 @@ async function auditThemeSwitch() {
   });
 
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.evaluate(() => {
-    sessionStorage.setItem("model-market-operator-key", "ui-operator");
-  });
+  await page.evaluate((key) => {
+    sessionStorage.setItem("model-market-operator-key", key);
+  }, operatorKey);
   await page.goto(`${frontendURL}/admin`, { waitUntil: "networkidle", timeout: 30_000 });
   await page.waitForSelector(".admin-readiness", { timeout: 10_000 });
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
@@ -106,12 +111,60 @@ async function auditThemeSwitch() {
   };
 }
 
+async function auditAgentWorkspace() {
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    deviceScaleFactor: 1,
+  });
+  const page = await context.newPage();
+  page.on("pageerror", (error) => failures.push(`workspace: ${error.message}`));
+  page.on("console", (entry) => {
+    if (entry.type() === "error") failures.push(`workspace: ${entry.text()}`);
+  });
+  await page.goto(frontendURL, { waitUntil: "networkidle", timeout: 30_000 });
+  await page.waitForSelector(".agent-workspace", { timeout: 10_000 });
+  await page.waitForTimeout(500);
+
+  const roster = page.locator(".agent-roster-item");
+  assert.equal(await roster.count(), 4);
+  const target = roster.nth(1);
+  const expectedName = (await target.locator("strong").first().innerText()).trim();
+  await target.click();
+  await page.locator(".agent-session-identity h3").filter({ hasText: expectedName }).waitFor();
+  assert.equal(await target.getAttribute("aria-pressed"), "true");
+
+  const pageFont = await page.locator("body").evaluate((element) => getComputedStyle(element).fontFamily);
+  assert.match(pageFont, /Onest/);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.ok(overflow <= 1, `Desktop overflowed by ${overflow}px`);
+
+  const transcript = page.locator(".agent-transcript");
+  if (await transcript.count()) {
+    await expectText(transcript, /Published reasoning/);
+    await expectText(transcript, /submit_trade_decision/);
+    await expectText(transcript, /Risk engine/);
+    await expectText(transcript, /Broker result/);
+    await page.locator(".agent-run-details summary").click();
+    await page.getByText("Provider model", { exact: true }).waitFor();
+  } else {
+    await expectText(page.locator(".agent-session-empty"), /published reasoning/i);
+  }
+
+  await context.close();
+  return { selectedAgent: expectedName, pageFont };
+}
+
+async function expectText(locator, pattern) {
+  assert.match(await locator.innerText(), pattern);
+}
+
 try {
   const publicDesktop = await auditPage("/", "arena-public-desktop.png", { width: 1440, height: 1000 });
   const publicMobile = await auditPage("/", "arena-public-mobile.png", { width: 390, height: 844 });
   const adminDesktop = await auditPage("/admin", "arena-admin-desktop.png", { width: 1440, height: 1000 }, true);
   const adminMobile = await auditPage("/admin", "arena-admin-mobile.png", { width: 390, height: 844 }, true);
   const lightTheme = await auditThemeSwitch();
+  const workspace = await auditAgentWorkspace();
 
   assert.match(publicDesktop.text, /One trading week/);
   assert.match(publicDesktop.text, /RobinArena/);
@@ -123,11 +176,15 @@ try {
   assert.match(publicDesktop.text, /Automation inactive/);
   assert.match(publicDesktop.text, /Robinhood/);
   assert.match(publicDesktop.text, /Inside the latest cycle/);
-  assert.match(publicDesktop.text, /structured rationale/);
+  assert.match(publicDesktop.text, /Choose a model to inspect its published reasoning/);
+  assert.match(publicDesktop.text, /Live feed connected/);
   assert.doesNotMatch(publicDesktop.text, /Open operator console|\bAdmin\b/);
   assert.equal(publicDesktop.xProfileHref, "https://x.com/RobinArenaFun");
   assert.doesNotMatch(publicDesktop.text, /\$1,000|\$250|\$100K|paper fills|replay tape/i);
   assert.equal(publicDesktop.logoLoaded && publicMobile.logoLoaded, true);
+  assert.match(publicDesktop.fontFamily, /Onest/);
+  assert.ok(publicDesktop.horizontalOverflow <= 1);
+  assert.ok(publicMobile.horizontalOverflow <= 1);
   assert.match(adminDesktop.text, /\$100\.00 allocation/);
   assert.match(adminDesktop.text, /\$25\.00/);
   assert.match(adminDesktop.text, /Run hourly during market hours/);
@@ -136,6 +193,9 @@ try {
   assert.match(adminDesktop.text, /Connect Robinhood/);
   assert.match(adminDesktop.text, /Arm live execution/);
   assert.equal(adminDesktop.logoLoaded && adminMobile.logoLoaded, true);
+  assert.match(adminDesktop.fontFamily, /Onest/);
+  assert.ok(adminDesktop.horizontalOverflow <= 1);
+  assert.ok(adminMobile.horizontalOverflow <= 1);
   assert.deepEqual(failures, []);
   return {
     public_desktop: join(output, "arena-public-desktop.png"),
@@ -149,6 +209,7 @@ try {
     browser_errors: failures.length,
     logo_loaded: true,
     theme_persistence: true,
+    agent_workspace: workspace,
   };
 } finally {
   await browser.close();

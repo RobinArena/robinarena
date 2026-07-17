@@ -31,7 +31,12 @@ export default defineNuxtConfig({
       scan: true,
       icons: [
         "ph:arrow-line-down",
+        "ph:arrow-up-right",
         "ph:arrows-clockwise",
+        "ph:bank",
+        "ph:brackets-curly",
+        "ph:broadcast",
+        "ph:caret-down",
         "ph:check-circle",
         "ph:circle-notch",
         "ph:link",
@@ -39,11 +44,14 @@ export default defineNuxtConfig({
         "ph:play-circle",
         "ph:play-fill",
         "ph:shield-check",
+        "ph:shield-warning",
         "ph:sign-in",
         "ph:stop-circle",
         "ph:sun",
+        "ph:terminal-window",
         "ph:moon",
         "ph:warning-circle",
+        "ph:waveform",
         "ph:x-logo",
       ],
     },
@@ -86,7 +94,7 @@ export default defineNuxtConfig({
   fonts: {
     families: [
       {
-        name: "Instrument Sans",
+        name: "Onest",
         provider: "google",
         weights: [400, 500, 600, 700],
         styles: ["normal"],

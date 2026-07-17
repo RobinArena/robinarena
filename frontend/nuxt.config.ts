@@ -10,6 +10,16 @@ const serverApiBaseUrl =
   process.env.NUXT_API_INTERNAL_BASE_URL ||
   process.env.NSTACK_API_BASE_URL ||
   (isProduction ? `http://${backendHost}:8080` : "http://localhost:4000");
+const themeInitScript = `(() => {
+  const root = document.documentElement;
+  let theme = "dark";
+  try {
+    const stored = localStorage.getItem("model-market-theme");
+    if (stored === "light" || stored === "dark") theme = stored;
+  } catch {}
+  root.dataset.theme = theme;
+  root.style.colorScheme = theme;
+})();`;
 
 export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
@@ -31,6 +41,8 @@ export default defineNuxtConfig({
         "ph:shield-check",
         "ph:sign-in",
         "ph:stop-circle",
+        "ph:sun",
+        "ph:moon",
         "ph:warning-circle",
       ],
     },
@@ -49,6 +61,14 @@ export default defineNuxtConfig({
       meta: [
         { name: "viewport", content: "width=device-width, initial-scale=1" },
         { name: "theme-color", content: "#0a0c0a" },
+      ],
+      script: [
+        {
+          id: "model-market-theme-init",
+          innerHTML: themeInitScript,
+          tagPosition: "head",
+          tagPriority: "critical",
+        },
       ],
       link: [
         { rel: "icon", type: "image/x-icon", href: "/favicon.ico" },

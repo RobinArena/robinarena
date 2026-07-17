@@ -114,7 +114,7 @@ function setHover(event: PointerEvent) {
           :key="line.agent_id"
           :d="line.path"
           class="model-chart-line"
-          :style="{ stroke: line.accent }"
+          :style="{ '--series-accent': line.accent }"
         />
         <line
           v-if="hoverIndex !== null"
@@ -132,7 +132,7 @@ function setHover(event: PointerEvent) {
             :cy="chart.y(line.points[hoverIndex]?.return_pct ?? 0)"
             r="4"
             class="chart-hover-point"
-            :style="{ fill: line.accent }"
+            :style="{ '--series-accent': line.accent }"
           />
         </template>
       </svg>
@@ -147,7 +147,7 @@ function setHover(event: PointerEvent) {
           {{ new Date(hover.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" }) }}
         </time>
         <div v-for="item in hover.entries" :key="item.name">
-          <span class="legend-swatch" :style="{ background: item.accent }" />
+          <span class="legend-swatch is-series" :style="{ '--series-accent': item.accent }" />
           <span>{{ item.name }}</span>
           <strong>{{ formatPercent(item.point.return_pct) }}</strong>
         </div>
@@ -156,7 +156,7 @@ function setHover(event: PointerEvent) {
 
     <div class="chart-legend" aria-label="Latest model returns">
       <div v-for="line in chart.lines" :key="line.agent_id">
-        <span class="legend-swatch" :style="{ background: line.accent }" />
+        <span class="legend-swatch is-series" :style="{ '--series-accent': line.accent }" />
         <span>{{ line.agent_name }}</span>
         <strong :class="(line.last?.return_pct || 0) >= 0 ? 'value-positive' : 'value-negative'">
           {{ formatPercent(line.last?.return_pct || 0) }}

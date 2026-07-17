@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const route = useRoute();
+const { theme, toggleTheme } = useArenaTheme();
 const navigation = computed(() => [
   { label: "Performance", to: "/#performance" },
   { label: "Decisions", to: "/#decisions" },
@@ -7,6 +8,9 @@ const navigation = computed(() => [
   { label: "Ledger", to: "/#ledger" },
   ...(route.path.startsWith("/admin") ? [{ label: "Admin", to: "/admin" }] : []),
 ]);
+const themeToggleLabel = computed(() => (
+  theme.value === "dark" ? "Switch to light mode" : "Switch to dark mode"
+));
 </script>
 
 <template>
@@ -32,9 +36,21 @@ const navigation = computed(() => [
         </NuxtLink>
       </nav>
 
-      <div class="nav-state" aria-label="Arena mode">
-        <Icon name="ph:shield-check" aria-hidden="true" />
-        Robinhood live
+      <div class="header-tools">
+        <div class="nav-state" aria-label="Arena mode">
+          <Icon name="ph:shield-check" aria-hidden="true" />
+          Robinhood live
+        </div>
+        <button
+          class="theme-toggle"
+          type="button"
+          :aria-label="themeToggleLabel"
+          :title="themeToggleLabel"
+          @click="toggleTheme"
+        >
+          <Icon v-if="theme === 'dark'" name="ph:sun" aria-hidden="true" />
+          <Icon v-else name="ph:moon" aria-hidden="true" />
+        </button>
       </div>
     </div>
   </header>

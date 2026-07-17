@@ -51,7 +51,7 @@ Each decision cycle follows the RobinSharks execution model:
 1. Reconcile Robinhood orders and reported fills.
 2. Import one shared quote snapshot and mark every open position.
 3. Submit hard-stop or take-profit exits before model inference.
-4. Ask all four models concurrently for one structured long-only decision.
+4. Ask all four models concurrently for one structured long-only decision. An empty model ledger must request a 20-40% opening position.
 5. Enforce confidence, cash, daily loss, risk per trade, position size, broker buying power, and duplicate-position limits.
 6. Submit approved orders to Robinhood and reconcile the resulting broker state.
 7. Append decisions, orders, trades, positions, and equity snapshots to PostgreSQL.

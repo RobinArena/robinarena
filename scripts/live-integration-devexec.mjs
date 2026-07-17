@@ -284,6 +284,7 @@ try {
   assert.equal(initial.arena.allocation_per_model, 25);
   assert.equal(initial.arena.round_number, 1, "initial weekly round number");
   assert.equal(initial.arena.cycle_number, 0);
+  assert.equal(initial.arena.scheduler_status, "inactive");
   assert.equal(
     new Date(initial.arena.round_ends_at).getTime()
       - new Date(initial.arena.round_started_at).getTime(),
@@ -318,6 +319,8 @@ try {
   assert.match(callback.headers.get("location") || "", /\/admin\?robinhood=connected$/);
   const oauthStatus = await apiJson("/admin/status", { headers });
   assert.equal(oauthStatus.robinhood_oauth.connected, true);
+  assert.equal(oauthStatus.scheduler.status, "inactive");
+  assert.equal(oauthStatus.scheduler.consecutive_failures, 0);
   const sync = await apiJson("/admin/sync", { method: "POST", headers });
   assert.equal(sync.status.arena.market.length, 6);
   assert.deepEqual(sync.status.arena.models.map((model) => model.initial_balance), [25, 25, 25, 25]);

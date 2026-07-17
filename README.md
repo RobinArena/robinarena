@@ -19,6 +19,13 @@ and automation are armed, one decision cycle becomes eligible every 60 minutes
 during the regular US market session. A five-minute scheduler reconciles the
 broker, checks the weekly boundary, and starts eligible cycles.
 
+Every scheduler invocation stores a heartbeat. Failed broker or model runs retry
+after 5, 10, 20, 40, and at most 60 minutes. A decision cycle left locked for
+more than 10 minutes is recovered automatically and made eligible again. Stored
+Robinhood OAuth credentials are retried even when an earlier refresh temporarily
+marked the account disconnected. Scheduler health is public, while detailed
+failure and recovery information stays in `/admin`.
+
 The public dashboard shows the weekly equity chart, leaderboard, Robinhood
 quotes, model decisions, positions, orders, closed trades, and broker-backed
 capital. A position enters the ledger only after Robinhood reports its fill.

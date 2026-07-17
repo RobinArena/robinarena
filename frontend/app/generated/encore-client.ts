@@ -176,6 +176,7 @@ export namespace api {
         authenticated: true
         arena: ArenaResponse
         broker?: BrokerAccountSummary
+        scheduler: SchedulerSummary
         "robinhood_oauth": {
             connected: boolean
             "expires_at"?: string
@@ -344,6 +345,9 @@ export namespace api {
         "round_progress_pct": number
         "cycle_interval_minutes": number
         "market_session_open": boolean
+        "scheduler_status": SchedulerHealth
+        "scheduler_last_seen_at"?: string
+        "scheduler_last_success_at"?: string
         "last_cycle_at"?: string
         "next_cycle_at": string
         "last_round_at": string
@@ -490,6 +494,20 @@ export namespace api {
 
     export interface RoundRequest {
         confirmation: string
+    }
+
+    export type SchedulerHealth = "healthy" | "delayed" | "error" | "inactive"
+
+    export interface SchedulerSummary {
+        status: SchedulerHealth
+        "last_seen_at"?: string
+        "last_success_at"?: string
+        "last_error_at"?: string
+        "last_error"?: string
+        "consecutive_failures": number
+        "retry_at"?: string
+        "recovery_count": number
+        "last_recovery_at"?: string
     }
 
     export interface StatusResponse {

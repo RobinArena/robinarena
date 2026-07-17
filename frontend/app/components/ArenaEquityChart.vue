@@ -167,6 +167,6 @@ function setHover(event: PointerEvent) {
 
   <div v-else class="empty-state">
     <Icon name="ph:chart-line" aria-hidden="true" />
-    <p>Equity history will appear after the first completed round.</p>
+    <p>Equity history will appear after the first broker reconciliation.</p>
   </div>
 </template>

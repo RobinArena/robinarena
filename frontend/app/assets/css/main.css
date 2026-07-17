@@ -340,6 +340,51 @@ a {
   letter-spacing: -0.05em;
 }
 
+.round-progress {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem 1.35rem;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.round-progress > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.round-progress > div span,
+.round-progress small {
+  color: var(--color-quiet);
+}
+
+.round-progress > div strong {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+.round-progress-track {
+  display: block;
+  overflow: hidden;
+  height: 0.28rem;
+  background: var(--color-line-strong);
+}
+
+.round-progress-track i {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 300ms ease;
+}
+
+.round-progress small {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+}
+
 .round-status {
   display: inline-flex;
   align-items: center;
@@ -2034,6 +2079,101 @@ a {
   line-height: 1.4;
 }
 
+.admin-round-state {
+  display: grid;
+  grid-template-columns: minmax(13rem, 0.65fr) minmax(16rem, 1fr) minmax(24rem, 1.45fr);
+  margin-top: 1rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+}
+
+.admin-round-summary,
+.admin-round-progress {
+  display: grid;
+  align-content: center;
+  gap: 0.55rem;
+  min-height: 8.5rem;
+  padding: 1.2rem;
+  border-right: 1px solid var(--color-line);
+}
+
+.admin-round-summary > span,
+.admin-round-progress span,
+.admin-round-state dt {
+  color: var(--color-quiet);
+  font-size: 0.7rem;
+}
+
+.admin-round-summary > strong {
+  font-family: var(--font-mono);
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.admin-round-summary > small {
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+}
+
+.admin-round-progress > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.admin-round-progress > div strong {
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.admin-round-progress > span {
+  display: block;
+  overflow: hidden;
+  height: 0.32rem;
+  background: var(--color-line-strong);
+}
+
+.admin-round-progress i {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 300ms ease;
+}
+
+.admin-round-state dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.admin-round-state dl > div {
+  display: grid;
+  align-content: center;
+  gap: 0.4rem;
+  min-height: 4.25rem;
+  padding: 0.8rem 1rem;
+  border-right: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.admin-round-state dl > div:nth-child(2n) {
+  border-right: 0;
+}
+
+.admin-round-state dl > div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.admin-round-state dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
 .admin-console-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2245,6 +2385,19 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .admin-round-state {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-round-progress {
+    border-right: 0;
+  }
+
+  .admin-round-state dl {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--color-line);
+  }
+
   .admin-console-grid {
     grid-template-columns: 1fr;
   }
@@ -2276,6 +2429,35 @@ a {
 
   .admin-readiness article {
     min-height: 8rem;
+  }
+
+  .admin-round-state {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-round-summary,
+  .admin-round-progress {
+    min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  .admin-round-state dl {
+    grid-column: auto;
+    grid-template-columns: 1fr;
+    border-top: 0;
+  }
+
+  .admin-round-state dl > div,
+  .admin-round-state dl > div:nth-child(2n),
+  .admin-round-state dl > div:nth-last-child(-n + 2) {
+    min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  .admin-round-state dl > div:last-child {
+    border-bottom: 0;
   }
 
   .broker-facts {

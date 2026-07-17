@@ -191,6 +191,7 @@ export namespace api {
     export interface ArenaDecision {
         id: string
         "round_number": number
+        "cycle_number": number
         "agent_id": string
         "agent_name": string
         "agent_code": string
@@ -230,6 +231,7 @@ export namespace api {
         status: "active" | "paused"
         "openrouter_model": string
         "initial_balance": number
+        "round_starting_equity": number
         "cash_balance": number
         equity: number
         "realized_pnl": number
@@ -287,6 +289,7 @@ export namespace api {
     export interface ArenaResponse {
         arena: ArenaSummary
         models: ArenaModel[]
+        "round_history": ArenaRound[]
         market: MarketQuote[]
         "equity_series": EquitySeries[]
         positions: ArenaPosition[]
@@ -298,16 +301,34 @@ export namespace api {
         "generated_at": string
     }
 
+    export interface ArenaRound {
+        id: string
+        "round_number": number
+        label: string
+        status: "active" | "completed"
+        "started_at": string
+        "ends_at": string
+        "starting_capital": number
+        "ending_capital"?: number
+        "winner_agent_id"?: string
+        "winner_agent_name"?: string
+        "winner_return_pct"?: number
+    }
+
     export type ArenaStatus = "running" | "paused"
 
     export interface ArenaSummary {
         title: string
         season: string
         "round_number": number
+        "cycle_number": number
+        "round_status": "active"
         status: ArenaStatus
         mode: "live"
+        "operator_capital_ceiling": number
         "capital_limit": number
         "allocation_per_model": number
+        "capital_source": "operator" | "robinhood"
         "starting_capital": number
         "total_equity": number
         "total_pnl": number
@@ -318,9 +339,18 @@ export namespace api {
         "live_armed": boolean
         "automation_enabled": boolean
         halted: boolean
+        "round_started_at": string
+        "round_ends_at": string
+        "round_progress_pct": number
+        "cycle_interval_minutes": number
+        "market_session_open": boolean
+        "last_cycle_at"?: string
+        "next_cycle_at": string
         "last_round_at": string
         "next_round_at": string
         "last_robinhood_sync_at"?: string
+        "broker_equity"?: number
+        "broker_buying_power"?: number
         "leader_id": string
     }
 
@@ -355,6 +385,10 @@ export namespace api {
         "buying_power": number
         equity: number
         "as_of": string
+        "operator_capital_ceiling": number
+        "deployable_capital": number
+        "allocation_per_model": number
+        "capital_source": "operator" | "robinhood"
         "allocated_capital": number
         "managed_exposure": number
         "unmanaged_positions": string[]

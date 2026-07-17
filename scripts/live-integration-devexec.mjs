@@ -32,12 +32,13 @@ let openRouterRequests = 0;
 let oauthRegistrations = 0;
 let oauthCodeExchanges = 0;
 let oauthRefreshes = 0;
+const decisionInputs = [];
 
 function cashBalance() {
   return orders.reduce((cash, order) => {
     const notional = order.filled_quantity * order.average_fill_price;
     return order.side === "buy" ? cash - notional : cash + notional;
-  }, 1000);
+  }, 100);
 }
 
 function openPositions() {
@@ -135,7 +136,7 @@ const mcp = createServer(async (request, response) => {
   } else if (name === "get_portfolio") {
     payload = {
       data: {
-        total_value: "1000",
+        total_value: "100",
         cash: String(cashBalance()),
         buying_power: {
           buying_power: String(cashBalance()),
@@ -240,6 +241,7 @@ const openrouter = createServer(async (request, response) => {
   openRouterInFlight += 1;
   maxOpenRouterInFlight = Math.max(maxOpenRouterInFlight, openRouterInFlight);
   const payload = await body(request);
+  decisionInputs.push(JSON.parse(payload.messages[1].content));
   openRouterRequests += 1;
   await new Promise((resolve) => setTimeout(resolve, 120));
   const symbol = modelSymbols[payload.model];
@@ -275,9 +277,27 @@ try {
   const unauthorized = await api("/admin/status");
   assert.equal(unauthorized.status, 401);
   const initial = await apiJson("/arena");
-  assert.equal(initial.arena.starting_capital, 1000);
-  assert.deepEqual(initial.models.map((model) => model.initial_balance), [250, 250, 250, 250]);
-  assert.equal(initial.market.length, 0);
+  assert.equal(initial.arena.starting_capital, 100);
+  assert.equal(initial.arena.operator_capital_ceiling, 100);
+  assert.equal(initial.arena.allocation_per_model, 25);
+  assert.equal(initial.arena.round_number, 1, "initial weekly round number");
+  assert.equal(initial.arena.cycle_number, 0);
+  assert.equal(
+    new Date(initial.arena.round_ends_at).getTime()
+      - new Date(initial.arena.round_started_at).getTime(),
+    7 * 24 * 60 * 60 * 1000,
+  );
+  assert.equal(initial.round_history.length, 1, "initial weekly round history");
+  assert.equal(initial.round_history[0].status, "active");
+  assert.deepEqual(initial.models.map((model) => model.initial_balance), [25, 25, 25, 25]);
+  assert.equal(
+    initial.market.length === 0
+      || (
+        initial.market.length === 6
+        && initial.market.every((quote) => quote.source === "robinhood_mcp")
+      ),
+    true,
+  );
   assert.equal(initial.decisions.length, 0);
   assert.equal(initial.orders.length, 0);
   assert.equal(initial.positions.length, 0);
@@ -298,12 +318,16 @@ try {
   assert.equal(oauthStatus.robinhood_oauth.connected, true);
   const sync = await apiJson("/admin/sync", { method: "POST", headers });
   assert.equal(sync.status.arena.market.length, 6);
-  assert.deepEqual(sync.status.arena.models.map((model) => model.initial_balance), [250, 250, 250, 250]);
-  assert.equal(sync.status.arena.arena.capital_limit, 1000);
+  assert.deepEqual(sync.status.arena.models.map((model) => model.initial_balance), [25, 25, 25, 25]);
+  assert.equal(sync.status.arena.arena.capital_limit, 100);
+  assert.equal(sync.status.broker.equity, 100);
+  assert.equal(sync.status.broker.deployable_capital, 100);
+  assert.equal(sync.status.broker.allocation_per_model, 25);
+  assert.equal(sync.status.broker.capital_source, "robinhood");
   assert.equal(sync.status.arena.arena.live_armed, false);
-  assert.equal(oauthRegistrations, 1);
-  assert.equal(oauthCodeExchanges, 1);
-  assert.equal(oauthRefreshes, 1);
+  assert.equal(oauthRegistrations, 1, "OAuth dynamic client registrations");
+  assert.equal(oauthCodeExchanges, 1, "OAuth authorization code exchanges");
+  assert.equal(oauthRefreshes, 1, "OAuth refreshes");
   assert.deepEqual([...mcpAuthorizationHeaders], ["Bearer refreshed-oauth-access"]);
 
   await apiJson("/admin/arm", {
@@ -327,8 +351,12 @@ try {
   assert.equal(arena.positions.every((position) => position.average_entry_price === prices[position.symbol]), true);
   assert.equal(arena.market.every((quote) => quote.source === "robinhood_mcp"), true);
   assert.equal(arena.decisions.every((decision) => decision.source === "openrouter"), true);
-  assert.equal(arena.models.every((model) => model.cash_balance === 200), true);
-  assert.equal(arena.arena.total_equity, 1000);
+  assert.equal(arena.decisions.every((decision) => decision.round_number === 1), true);
+  assert.equal(arena.decisions.every((decision) => decision.cycle_number === 1), true);
+  assert.equal(arena.models.every((model) => model.cash_balance === 20), true);
+  assert.equal(arena.arena.round_number, 1, "weekly round after entry cycle");
+  assert.equal(arena.arena.cycle_number, 1, "entry decision cycle number");
+  assert.equal(arena.arena.total_equity, 100);
   assert.equal(arena.arena.pending_orders, 0);
   assert.equal(maxOpenRouterInFlight, 4);
   assert.equal(toolCalls.get("review_equity_order"), 4);
@@ -343,13 +371,22 @@ try {
   assert.equal(exited.orders.length, 8);
   assert.equal(exited.positions.length, 0);
   assert.equal(exited.trades.filter((trade) => trade.status === "closed").length, 4);
-  assert.equal(exited.models.every((model) => model.cash_balance === 250), true);
-  assert.equal(exited.arena.total_equity, 1000);
+  assert.equal(exited.models.every((model) => model.cash_balance === 25), true);
+  assert.equal(exited.arena.round_number, 1, "weekly round after exit cycle");
+  assert.equal(exited.arena.cycle_number, 2);
+  assert.equal(exited.decisions.filter((decision) => decision.cycle_number === 2).length, 4);
+  assert.equal(exited.arena.total_equity, 100);
   assert.equal(exited.arena.pending_orders, 0);
   assert.equal(toolCalls.get("review_equity_order"), 8);
   assert.equal(toolCalls.get("place_equity_order"), 8);
 
-  await apiJson("/admin/disarm", { method: "POST", headers });
+  const disarmed = await apiJson("/admin/disarm", { method: "POST", headers });
+  assert.equal(disarmed.status.arena.arena.status, "running");
+  assert.equal(disarmed.status.arena.arena.live_armed, false);
+  assert.deepEqual(
+    decisionInputs.map((input) => [input.round_number, input.cycle_number]),
+    [[1, 1], [1, 1], [1, 1], [1, 1], [1, 2], [1, 2], [1, 2], [1, 2]],
+  );
   return {
     allocations: arena.models.map((model) => model.initial_balance),
     verified_quotes: arena.market.length,
@@ -364,6 +401,12 @@ try {
     closed_trades: exited.trades.filter((trade) => trade.status === "closed").length,
     ending_positions: exited.positions.length,
     ending_cash_per_model: exited.models.map((model) => model.cash_balance),
+    weekly_round_number: exited.arena.round_number,
+    decision_cycles: exited.arena.cycle_number,
+    round_duration_days: (
+      new Date(exited.arena.round_ends_at).getTime()
+      - new Date(exited.arena.round_started_at).getTime()
+    ) / (24 * 60 * 60 * 1000),
     oauth_registrations: oauthRegistrations,
     oauth_code_exchanges: oauthCodeExchanges,
     oauth_refreshes: oauthRefreshes,

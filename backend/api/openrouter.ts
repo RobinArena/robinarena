@@ -32,6 +32,7 @@ export interface OpenRouterPositionInput {
 
 export interface OpenRouterDecisionInput {
   round_number: number;
+  cycle_number: number;
   model: string;
   agent: {
     name: string;
@@ -197,7 +198,7 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
   const appUrl = process.env.OPENROUTER_APP_URL?.trim();
 
   const system = [
-    "You are a competitor in Model Market, a long-only live trading arena using real money in a dedicated Robinhood Agentic account.",
+    "You are a competitor in Model Market, a week-long, long-only live trading arena using real money in a dedicated Robinhood Agentic account.",
     "Choose one action from buy, sell, or hold using only the supplied snapshot.",
     "A buy must select a shared-market symbol without an existing position.",
     "A sell must select a symbol currently held by this portfolio.",

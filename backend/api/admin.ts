@@ -109,7 +109,7 @@ export const syncAdminArena = api(
   async (): Promise<AdminControlResponse> => {
     const broker = await syncRobinhood();
     return control(
-      `Robinhood reconciled. ${broker.unmanaged_positions.length} unmanaged position symbols found.`,
+      `Robinhood reconciled at $${broker.deployable_capital.toFixed(2)} deployable capital, with $${broker.allocation_per_model.toFixed(2)} per model. ${broker.unmanaged_positions.length} unmanaged position symbols found.`,
     );
   },
 );
@@ -122,8 +122,8 @@ export const armAdminArena = api(
     }
     await armLiveArena(Boolean(request.automation_enabled));
     return control(request.automation_enabled
-      ? "Live Robinhood execution is armed with five-minute automation."
-      : "Live Robinhood execution is armed for manual rounds.");
+      ? "Live Robinhood execution is armed for hourly decisions during regular market hours."
+      : "Live Robinhood execution is armed for manual decision cycles.");
   },
 );
 
@@ -187,7 +187,7 @@ export const scheduledArenaRound = api(
 );
 
 const _arenaSchedule = new CronJob("model-market-live-round", {
-  title: "Run the armed Model Market arena",
+  title: "Reconcile the weekly Model Market arena",
   every: "5m",
   endpoint: scheduledArenaRound,
 });

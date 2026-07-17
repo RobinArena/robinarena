@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { api } from "~/generated/encore-client";
-import { formatCurrency, formatPercent, formatQuantity, formatRelativeTime } from "~/utils/format";
+import { formatCurrency, formatDateTime, formatPercent, formatQuantity, formatRelativeTime } from "~/utils/format";
 import { loadOperatorKey, operatorClient, saveOperatorKey } from "~/utils/operator";
 
 useSeoMeta({
@@ -42,9 +42,16 @@ const readiness = computed(() => {
     },
     {
       label: "Capital",
-      value: broker.value ? formatCurrency(broker.value.buying_power + broker.value.managed_exposure) : "Unknown",
-      ready: Boolean(broker.value && broker.value.buying_power + broker.value.managed_exposure >= 1000),
-      detail: "$1,000 required across cash and arena holdings",
+      value: broker.value ? formatCurrency(broker.value.deployable_capital) : "Unknown",
+      ready: Boolean(
+        broker.value
+        && broker.value.capital_source === "robinhood"
+        && broker.value.buying_power + broker.value.managed_exposure + 0.01
+          >= broker.value.allocated_capital
+      ),
+      detail: broker.value
+        ? `${formatCurrency(broker.value.operator_capital_ceiling)} ceiling, ${formatCurrency(broker.value.allocation_per_model)} per model`
+        : "Run a broker sync",
     },
     {
       label: "Ledger match",
@@ -226,8 +233,8 @@ onBeforeUnmount(pause);
     <template v-else-if="status && arena">
       <header class="admin-header">
         <div>
-          <h1>Operate the live arena.</h1>
-          <p>Reconcile Robinhood, confirm account ownership, then arm manual or scheduled rounds.</p>
+          <h1>Operate the weekly arena.</h1>
+          <p>Robinhood funds the four ledgers. OpenRouter decisions can run manually or once per hour during regular market hours.</p>
         </div>
         <div class="admin-session">
           <span :class="{ 'is-live': arena.arena.live_armed, 'is-halted': arena.arena.halted }">
@@ -250,6 +257,27 @@ onBeforeUnmount(pause);
         </article>
       </section>
 
+      <section class="admin-round-state" aria-label="Current competition round">
+        <div class="admin-round-summary">
+          <span>{{ arena.arena.season }}</span>
+          <strong>Round {{ arena.arena.round_number }}</strong>
+          <small>{{ formatDateTime(arena.arena.round_started_at) }} to {{ formatDateTime(arena.arena.round_ends_at) }}</small>
+        </div>
+        <div class="admin-round-progress">
+          <div>
+            <span>Weekly progress</span>
+            <strong>{{ Math.round(arena.arena.round_progress_pct) }}%</strong>
+          </div>
+          <span aria-hidden="true"><i :style="{ width: `${arena.arena.round_progress_pct}%` }" /></span>
+        </div>
+        <dl>
+          <div><dt>Current cycle</dt><dd>#{{ arena.arena.cycle_number }}</dd></div>
+          <div><dt>Round closes</dt><dd>{{ formatRelativeTime(arena.arena.round_ends_at) }}</dd></div>
+          <div><dt>Next eligible cycle</dt><dd>{{ arena.arena.live_armed ? formatRelativeTime(arena.arena.next_cycle_at) : "After arming" }}</dd></div>
+          <div><dt>US market</dt><dd>{{ arena.arena.market_session_open ? "Open" : "Closed" }}</dd></div>
+        </dl>
+      </section>
+
       <section class="admin-console-grid">
         <div class="admin-column">
           <article class="admin-panel sync-panel">
@@ -263,6 +291,8 @@ onBeforeUnmount(pause);
             <dl v-if="broker" class="broker-facts">
               <div><dt>Account equity</dt><dd>{{ formatCurrency(broker.equity) }}</dd></div>
               <div><dt>Buying power</dt><dd>{{ formatCurrency(broker.buying_power) }}</dd></div>
+              <div><dt>Deployable capital</dt><dd>{{ formatCurrency(broker.deployable_capital) }}</dd></div>
+              <div><dt>Per model</dt><dd>{{ formatCurrency(broker.allocation_per_model) }}</dd></div>
               <div><dt>Arena exposure</dt><dd>{{ formatCurrency(broker.managed_exposure) }}</dd></div>
               <div><dt>Broker timestamp</dt><dd>{{ formatRelativeTime(broker.as_of) }}</dd></div>
             </dl>
@@ -282,8 +312,8 @@ onBeforeUnmount(pause);
           <article class="admin-panel allocation-panel">
             <div class="admin-panel-heading">
               <div>
-                <h2>$1,000 allocation</h2>
-                <p>Four isolated model ledgers, each capped at $250.</p>
+                <h2>{{ formatCurrency(arena.arena.capital_limit) }} allocation</h2>
+                <p>The four weekly ledger baselines total {{ formatCurrency(arena.arena.starting_capital) }}. Current holdings carry into the next scoreboard.</p>
               </div>
               <strong>{{ formatCurrency(arena.arena.total_equity) }}</strong>
             </div>
@@ -303,7 +333,7 @@ onBeforeUnmount(pause);
             <div class="admin-panel-heading">
               <div>
                 <h2>Execution</h2>
-                <p>Arming authorizes real orders. A manual round requires a second phrase every time.</p>
+                <p>Arming authorizes real orders. A manual decision cycle requires a second phrase every time.</p>
               </div>
               <Icon name="ph:play-circle" aria-hidden="true" />
             </div>
@@ -311,7 +341,7 @@ onBeforeUnmount(pause);
             <div v-if="!arena.arena.live_armed" class="confirmation-control">
               <label class="automation-option">
                 <input v-model="automationEnabled" type="checkbox">
-                <span><strong>Run every five minutes</strong><small>Leave off to require a manual round.</small></span>
+                <span><strong>Run hourly during market hours</strong><small>The five-minute scheduler reconciles Robinhood and starts a cycle when it becomes eligible.</small></span>
               </label>
               <label>
                 <span>Type to arm live trading</span>
@@ -326,14 +356,14 @@ onBeforeUnmount(pause);
 
             <div v-else class="confirmation-control">
               <label>
-                <span>Type to run one live round</span>
+                <span>Type to run one live decision cycle</span>
                 <code>{{ status.execution_confirmation }}</code>
                 <input v-model="executionPhrase" type="text" autocomplete="off">
               </label>
               <div class="button-row">
                 <button class="button button-primary" type="button" :disabled="Boolean(pending) || executionPhrase !== status.execution_confirmation" @click="runRound">
                   <Icon :name="pending === 'round' ? 'ph:circle-notch' : 'ph:play-fill'" :class="{ 'is-spinning': pending === 'round' }" aria-hidden="true" />
-                  {{ pending === "round" ? "Running four models" : "Run live round" }}
+                  {{ pending === "round" ? "Running four models" : "Run decision cycle" }}
                 </button>
                 <button class="button button-quiet" type="button" :disabled="Boolean(pending)" @click="disarmArena">Disarm</button>
               </div>
@@ -344,7 +374,7 @@ onBeforeUnmount(pause);
             <div class="admin-panel-heading">
               <div>
                 <h2>Emergency controls</h2>
-                <p>Halt disables new rounds. Flatten sells only positions owned by arena ledgers.</p>
+                <p>Halt disables new decision cycles. Flatten sells only positions owned by arena ledgers.</p>
               </div>
               <Icon name="ph:warning-octagon" aria-hidden="true" />
             </div>

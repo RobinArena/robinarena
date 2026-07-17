@@ -1,4 +1,9 @@
 import { APIError } from "encore.dev/api";
+import {
+  COMPETITION_ROUND_DAYS,
+  DECISION_CYCLE_MINUTES,
+  regularMarketSessionOpen,
+} from "./arena-time";
 import { db } from "./db";
 import {
   ARENA_UNIVERSE,
@@ -137,6 +142,7 @@ function providerAudit(result: OpenRouterDecisionResult): DecisionAudit {
 
 async function insertDecision(input: {
   roundNumber: number;
+  cycleNumber?: number;
   agentId: string;
   symbol: string;
   action: ArenaAction;
@@ -149,15 +155,16 @@ async function insertDecision(input: {
   orderId?: string;
   audit: DecisionAudit;
 }): Promise<void> {
+  const cycleNumber = input.cycleNumber ?? (await getArenaState()).cycle_number;
   await db.exec`
     INSERT INTO arena_decisions (
-      round_number, agent_id, symbol, action, confidence, rationale,
+      round_number, cycle_number, agent_id, symbol, action, confidence, rationale,
       requested_action, requested_allocation_pct, proposed_notional,
       executed_notional, approved, risk_note, source, order_id,
       provider_model, provider_request_id, prompt_tokens, completion_tokens,
       latency_ms, generation_cost
     ) VALUES (
-      ${input.roundNumber}, ${input.agentId}, ${input.symbol}, ${input.action},
+      ${input.roundNumber}, ${cycleNumber}, ${input.agentId}, ${input.symbol}, ${input.action},
       ${input.confidence}, ${input.rationale}, ${input.audit.requestedAction},
       ${input.audit.requestedAllocationPct}, ${input.proposedNotional || 0},
       ${input.executedNotional || 0}, ${Boolean(input.approved)}, ${input.riskNote},
@@ -584,6 +591,227 @@ async function unmanagedBrokerSymbols(
   }).sort();
 }
 
+interface RoundLifecycleAgent {
+  id: string;
+  equity: string | number;
+  starting_equity: string | number;
+}
+
+export async function ensureWeeklyCompetition(): Promise<void> {
+  const tx = await db.begin();
+  try {
+    const state = await tx.queryRow<{
+      round_number: number;
+      competition_ends_at: Date | string;
+      cycle_in_progress: boolean;
+      cycle_started_at: Date | string | null;
+    }>`
+      SELECT round_number, competition_ends_at, cycle_in_progress, cycle_started_at
+      FROM arena_state WHERE id = 1 FOR UPDATE
+    `;
+    if (!state) throw new Error("arena state is missing");
+    if (new Date(state.competition_ends_at).getTime() > Date.now()) {
+      await tx.commit();
+      return;
+    }
+    if (
+      state.cycle_in_progress
+      && state.cycle_started_at
+      && new Date(state.cycle_started_at).getTime() > Date.now() - 10 * 60 * 1000
+    ) {
+      await tx.commit();
+      return;
+    }
+
+    const activeRound = await tx.queryRow<{ id: string }>`
+      SELECT id FROM arena_rounds WHERE status = 'active' FOR UPDATE
+    `;
+    const agents = await tx.queryAll<RoundLifecycleAgent>`
+      SELECT agent.id, agent.equity,
+        coalesce(result.starting_equity, agent.initial_balance) AS starting_equity
+      FROM arena_agents agent
+      LEFT JOIN arena_round_results result
+        ON result.agent_id = agent.id AND result.round_id = ${activeRound?.id || null}
+      ORDER BY agent.id
+    `;
+    const ranked = agents.map((agent) => {
+      const starting = numeric(agent.starting_equity);
+      const equity = numeric(agent.equity);
+      return {
+        ...agent,
+        equity,
+        returnPct: starting > 0 ? ((equity - starting) / starting) * 100 : 0,
+      };
+    }).sort((left, right) => right.returnPct - left.returnPct || left.id.localeCompare(right.id));
+    const endingCapital = ranked.reduce((total, agent) => total + agent.equity, 0);
+
+    if (activeRound) {
+      for (const [index, agent] of ranked.entries()) {
+        await tx.exec`
+          UPDATE arena_round_results SET
+            ending_equity = ${agent.equity},
+            return_pct = ${agent.returnPct},
+            final_rank = ${index + 1},
+            updated_at = now()
+          WHERE round_id = ${activeRound.id} AND agent_id = ${agent.id}
+        `;
+      }
+      await tx.exec`
+        UPDATE arena_rounds SET
+          status = 'completed',
+          ending_capital = ${endingCapital},
+          winner_agent_id = ${ranked[0]?.id || null},
+          winner_return_pct = ${ranked[0]?.returnPct ?? null},
+          completed_at = now(),
+          updated_at = now()
+        WHERE id = ${activeRound.id}
+      `;
+    }
+
+    const nextRoundNumber = state.round_number + 1;
+    const label = `Week ${String(nextRoundNumber).padStart(2, "0")}`;
+    const startedAt = new Date();
+    const endsAt = new Date(
+      startedAt.getTime() + COMPETITION_ROUND_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const nextRound = await tx.queryRow<{ id: string }>`
+      INSERT INTO arena_rounds (
+        round_number, label, status, started_at, ends_at, starting_capital
+      ) VALUES (
+        ${nextRoundNumber}, ${label}, 'active', ${startedAt}, ${endsAt}, ${endingCapital}
+      )
+      RETURNING id
+    `;
+    if (!nextRound) throw new Error("the next weekly round could not be created");
+    for (const agent of ranked) {
+      await tx.exec`
+        INSERT INTO arena_round_results (round_id, agent_id, starting_equity)
+        VALUES (${nextRound.id}, ${agent.id}, ${agent.equity})
+      `;
+    }
+    await tx.exec`
+      INSERT INTO arena_equity_snapshots (agent_id, equity, source, round_id)
+      SELECT id, equity, 'robinhood_mcp', ${nextRound.id}
+      FROM arena_agents
+    `;
+    await tx.exec`
+      UPDATE arena_state SET
+        season = ${label},
+        round_number = ${nextRoundNumber},
+        cycle_number = 0,
+        cycle_in_progress = false,
+        cycle_started_at = NULL,
+        last_cycle_at = NULL,
+        next_cycle_at = now(),
+        competition_started_at = ${startedAt},
+        competition_ends_at = ${endsAt},
+        last_round_at = ${startedAt},
+        next_round_at = ${endsAt},
+        updated_at = now()
+      WHERE id = 1
+    `;
+    await tx.commit();
+  } catch (cause) {
+    await tx.rollback();
+    throw cause;
+  }
+}
+
+async function reconcileArenaCapital(account: {
+  buying_power: number;
+  equity: number;
+}): Promise<void> {
+  const tx = await db.begin();
+  try {
+    const state = await tx.queryRow<{
+      operator_capital_ceiling: string | number;
+      capital_initialized_at: Date | string | null;
+    }>`
+      SELECT operator_capital_ceiling, capital_initialized_at
+      FROM arena_state WHERE id = 1 FOR UPDATE
+    `;
+    if (!state) throw new Error("arena state is missing");
+    const ceiling = numeric(state.operator_capital_ceiling);
+    const deployable = rounded(Math.max(0, Math.min(ceiling, account.equity)), 2);
+    const allocation = rounded(deployable / 4, 4);
+    if (deployable < 4 || allocation < 1) {
+      await tx.exec`
+        UPDATE arena_state SET
+          capital_limit = ${deployable},
+          allocation_per_model = ${allocation},
+          capital_source = 'robinhood',
+          updated_at = now()
+        WHERE id = 1
+      `;
+      await tx.commit();
+      throw APIError.failedPrecondition(
+        "the Agentic account needs at least $4.00 to maintain four model ledgers",
+      );
+    }
+
+    await tx.exec`
+      UPDATE arena_state SET
+        capital_limit = ${deployable},
+        allocation_per_model = ${allocation},
+        capital_source = 'robinhood',
+        capital_initialized_at = coalesce(capital_initialized_at, now()),
+        updated_at = now()
+      WHERE id = 1
+    `;
+
+    if (!state.capital_initialized_at) {
+      const activity = await tx.queryRow<{ count: string | number }>`
+        SELECT
+          (SELECT count(*) FROM arena_orders)
+          + (SELECT count(*) FROM arena_trades)
+          + (SELECT count(*) FROM arena_positions)
+          + (SELECT count(*) FROM arena_decisions) AS count
+      `;
+      if (numeric(activity?.count) > 0) {
+        throw APIError.failedPrecondition(
+          "capital cannot be initialized while the arena execution ledger contains activity",
+        );
+      }
+      await tx.exec`
+        UPDATE arena_agents SET
+          initial_balance = ${allocation},
+          cash_balance = ${allocation},
+          equity = ${allocation},
+          realized_pnl = 0,
+          unrealized_pnl = 0,
+          max_daily_loss = ${rounded(allocation * 0.05, 4)},
+          updated_at = now()
+      `;
+      const activeRound = await tx.queryRow<{ id: string }>`
+        SELECT id FROM arena_rounds WHERE status = 'active' FOR UPDATE
+      `;
+      if (!activeRound) throw new Error("the active weekly round is missing");
+      await tx.exec`
+        UPDATE arena_rounds SET starting_capital = ${deployable}, updated_at = now()
+        WHERE id = ${activeRound.id}
+      `;
+      await tx.exec`
+        UPDATE arena_round_results result SET
+          starting_equity = ${allocation},
+          updated_at = now()
+        WHERE result.round_id = ${activeRound.id}
+      `;
+      await tx.exec`
+        DELETE FROM arena_equity_snapshots WHERE round_id = ${activeRound.id}
+      `;
+      await tx.exec`
+        INSERT INTO arena_equity_snapshots (agent_id, equity, source, round_id)
+        SELECT id, equity, 'robinhood_mcp', ${activeRound.id}
+        FROM arena_agents
+      `;
+    }
+    await tx.commit();
+  } catch (cause) {
+    await tx.rollback();
+    throw cause;
+  }
+}
+
 export async function syncRobinhood(): Promise<BrokerAccountSummary> {
   await claimSync();
   try {
@@ -597,6 +825,7 @@ export async function syncRobinhood(): Promise<BrokerAccountSummary> {
     await recordQuotes(quotes);
     await reconcileOrders(remoteOrders);
     await markToMarket();
+    await reconcileArenaCapital(account);
     const unmanaged = await unmanagedBrokerSymbols(brokerPositions);
     await db.exec`
       UPDATE arena_state SET broker_buying_power = ${account.buying_power},
@@ -622,12 +851,14 @@ export async function syncRobinhood(): Promise<BrokerAccountSummary> {
 
 function decisionInput(
   roundNumber: number,
+  cycleNumber: number,
   agent: AgentRow,
   market: MarketQuote[],
   positions: ArenaPosition[],
 ) {
   return {
     round_number: roundNumber,
+    cycle_number: cycleNumber,
     model: agent.openrouter_model,
     agent: {
       name: agent.name,
@@ -674,13 +905,16 @@ function decisionInput(
 
 async function requestModelDecisions(
   roundNumber: number,
+  cycleNumber: number,
   agents: AgentRow[],
   market: MarketQuote[],
   positions: ArenaPosition[],
 ): Promise<ProviderOutcome[]> {
   return Promise.all(agents.map(async (agent): Promise<ProviderOutcome> => {
     try {
-      const result = await requestOpenRouterDecision(decisionInput(roundNumber, agent, market, positions));
+      const result = await requestOpenRouterDecision(
+        decisionInput(roundNumber, cycleNumber, agent, market, positions),
+      );
       return { ok: true, agent, result };
     } catch (cause) {
       const error = cause instanceof OpenRouterRequestError
@@ -1104,20 +1338,39 @@ async function enforceHardExits(roundNumber: number): Promise<Set<string>> {
   return exited;
 }
 
-export async function runLiveRound(): Promise<RunRoundResponse> {
+export async function runLiveRound(options?: {
+  brokerAlreadySynced?: boolean;
+}): Promise<RunRoundResponse> {
   if (!openRouterConfigured()) throw APIError.failedPrecondition("OpenRouterAPIKey is not configured");
-  const claimed = await db.queryRow<{ round_number: number }>`
-    UPDATE arena_state SET round_number = round_number + 1,
-      round_in_progress = true, round_started_at = now(), last_round_at = now(),
-      next_round_at = now() + interval '5 minutes', updated_at = now()
+  await ensureWeeklyCompetition();
+  const claimed = await db.queryRow<{ round_number: number; cycle_number: number }>`
+    UPDATE arena_state SET
+      cycle_number = cycle_number + 1,
+      cycle_in_progress = true,
+      cycle_started_at = now(),
+      last_cycle_at = now(),
+      next_cycle_at = now() + (${DECISION_CYCLE_MINUTES} * interval '1 minute'),
+      updated_at = now()
     WHERE id = 1 AND status = 'running' AND live_armed = true AND halted = false
-      AND (round_in_progress = false OR round_started_at < now() - interval '4 minutes')
-    RETURNING round_number
+      AND (
+        cycle_in_progress = false
+        OR cycle_started_at < now() - interval '10 minutes'
+      )
+    RETURNING round_number, cycle_number
   `;
-  if (!claimed) throw APIError.failedPrecondition("the live arena is disarmed, halted, or already clearing a round");
+  if (!claimed) {
+    throw APIError.failedPrecondition(
+      "the live arena is disarmed, halted, or already running a decision cycle",
+    );
+  }
 
   try {
-    const broker = await syncRobinhood();
+    const broker = options?.brokerAlreadySynced
+      ? await storedBrokerSummary()
+      : await syncRobinhood();
+    if (!broker) {
+      throw APIError.failedPrecondition("Robinhood has not supplied a verified account snapshot");
+    }
     if (broker.unmanaged_positions.length > 0) {
       throw APIError.failedPrecondition("Robinhood holdings differ from the arena ledger; reconcile before trading");
     }
@@ -1151,7 +1404,13 @@ export async function runLiveRound(): Promise<RunRoundResponse> {
       }
     }
     const eligible = agents.filter((agent) => agent.status === "active" && !exitedAgents.has(agent.id));
-    const outcomes = await requestModelDecisions(claimed.round_number, eligible, market, positions);
+    const outcomes = await requestModelDecisions(
+      claimed.round_number,
+      claimed.cycle_number,
+      eligible,
+      market,
+      positions,
+    );
     for (const outcome of outcomes) {
       roundResults.push(outcome.ok
         ? await executeModelDecision(outcome, claimed.round_number)
@@ -1167,13 +1426,18 @@ export async function runLiveRound(): Promise<RunRoundResponse> {
     const completed = roundResults.filter((result) => result.status === "completed").length;
     const submitted = roundResults.filter((result) => Boolean(result.order_id)).length;
     const roundMessage = failed > 0
-      ? `Round ${claimed.round_number} finished with ${completed} decisions, ${submitted} live orders, and ${failed} provider or broker failures.`
-      : `Round ${claimed.round_number} finished with ${completed} decisions and ${submitted} live Robinhood orders.`;
+      ? `Cycle ${claimed.cycle_number} of Week ${String(claimed.round_number).padStart(2, "0")} finished with ${completed} decisions, ${submitted} live orders, and ${failed} provider or broker failures.`
+      : `Cycle ${claimed.cycle_number} of Week ${String(claimed.round_number).padStart(2, "0")} finished with ${completed} decisions and ${submitted} live Robinhood orders.`;
     return { ...arena, round_message: roundMessage, round_results: roundResults };
   } finally {
     await db.exec`
-      UPDATE arena_state SET round_in_progress = false, round_started_at = NULL, updated_at = now()
-      WHERE id = 1 AND round_number = ${claimed.round_number}
+      UPDATE arena_state SET
+        cycle_in_progress = false,
+        cycle_started_at = NULL,
+        updated_at = now()
+      WHERE id = 1
+        AND round_number = ${claimed.round_number}
+        AND cycle_number = ${claimed.cycle_number}
     `;
   }
 }
@@ -1203,7 +1467,7 @@ export async function armLiveArena(automationEnabled: boolean): Promise<BrokerAc
 export async function disarmLiveArena(): Promise<void> {
   await db.exec`
     UPDATE arena_state SET live_armed = false, automation_enabled = false,
-      status = 'paused', updated_at = now() WHERE id = 1
+      updated_at = now() WHERE id = 1
   `;
 }
 
@@ -1277,7 +1541,22 @@ export async function flattenManagedPositions(): Promise<number> {
 }
 
 export async function scheduledLiveRound(): Promise<void> {
-  const state = await getArenaState();
-  if (!state.live_armed || !state.automation_enabled || state.halted || state.status !== "running") return;
-  await runLiveRound();
+  let state = await getArenaState();
+  let brokerSynced = false;
+  if (state.robinhood_oauth_connected) {
+    try {
+      await syncRobinhood();
+      brokerSynced = true;
+    } catch {
+      // The state records the sync error. Automated execution waits for a verified snapshot.
+    }
+  }
+  await ensureWeeklyCompetition();
+  state = await getArenaState();
+  if (!state.live_armed || !state.automation_enabled || state.halted || state.status !== "running") {
+    return;
+  }
+  if (!brokerSynced || !regularMarketSessionOpen()) return;
+  if (new Date(state.next_cycle_at).getTime() > Date.now()) return;
+  await runLiveRound({ brokerAlreadySynced: true });
 }

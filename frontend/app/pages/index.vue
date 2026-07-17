@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { formatCurrency, formatPercent, formatPrice, formatQuantity, formatRelativeTime, formatSignedCurrency } from "~/utils/format";
+import { formatCurrency, formatDateTime, formatPercent, formatPrice, formatQuantity, formatRelativeTime, formatSignedCurrency } from "~/utils/format";
 
 useSeoMeta({
   title: "Live LLM trading arena",
-  description: "Four language models trade isolated $250 allocations through OpenRouter and Robinhood.",
+  description: "Four language models compete for one week with isolated live allocations routed through OpenRouter and Robinhood.",
 });
 
 const { data, error, status, refresh } = await useAsyncData(
@@ -16,6 +16,14 @@ const selectedModel = ref("all");
 const ledgerView = ref<"positions" | "orders" | "trades">("positions");
 
 const leader = computed(() => data.value?.models[0]);
+const cycleTiming = computed(() => {
+  const current = data.value?.arena;
+  if (!current) return "Pending";
+  if (!current.live_armed) return "Waiting for operator";
+  if (!current.automation_enabled) return "Manual cycles";
+  if (!current.market_session_open) return "Next market session";
+  return `Eligible ${formatRelativeTime(current.next_cycle_at)}`;
+});
 const filteredDecisions = computed(() => {
   if (!data.value) return [];
   return selectedModel.value === "all"
@@ -46,13 +54,13 @@ const summaryMetrics = computed(() => data.value ? [
   {
     label: "Combined equity",
     value: formatCurrency(data.value.arena.total_equity),
-    detail: `${formatSignedCurrency(data.value.arena.total_pnl)} across four live allocations`,
+    detail: `${formatSignedCurrency(data.value.arena.total_pnl)} across four isolated ledgers`,
     tone: data.value.arena.total_pnl >= 0 ? "positive" : "negative",
   },
   {
-    label: "Arena return",
+    label: "Weekly return",
     value: formatPercent(data.value.arena.return_pct),
-    detail: `From ${formatCurrency(data.value.arena.starting_capital, true)} starting capital`,
+    detail: `From ${formatCurrency(data.value.arena.starting_capital)} at the weekly open`,
     tone: data.value.arena.return_pct >= 0 ? "positive" : "negative",
   },
   {
@@ -64,7 +72,7 @@ const summaryMetrics = computed(() => data.value ? [
   {
     label: "Current leader",
     value: leader.value?.name || "Pending",
-    detail: leader.value ? `${formatPercent(leader.value.return_pct)} since live allocation` : "Waiting for results",
+    detail: leader.value ? `${formatPercent(leader.value.return_pct)} this week` : "Waiting for results",
     tone: "leader",
   },
 ] : []);
@@ -108,9 +116,9 @@ onBeforeUnmount(pause);
     <template v-else-if="data">
       <header class="arena-hero">
         <div class="hero-copy">
-          <h1>Four models. One live market.</h1>
+          <h1>Four models. One trading week.</h1>
           <p>
-            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 each control a $250 long-only allocation. OpenRouter carries their decisions. Robinhood supplies the quotes and executes approved orders.
+            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 compete through isolated ledgers under a {{ formatCurrency(data.arena.operator_capital_ceiling) }} operator ceiling. Robinhood reports the deployable balance and executes approved orders. OpenRouter carries every decision.
           </p>
           <div class="hero-actions">
             <NuxtLink class="button button-primary" to="/admin">
@@ -131,39 +139,49 @@ onBeforeUnmount(pause);
               <h2 id="round-heading">Round {{ data.arena.round_number }}</h2>
             </div>
             <span class="round-status">
-              <Icon :name="data.arena.halted ? 'ph:stop-circle' : data.arena.live_armed ? 'ph:play-circle' : 'ph:pause-circle'" aria-hidden="true" />
-              {{ data.arena.halted ? "halted" : data.arena.live_armed ? "armed" : "disarmed" }}
+              <Icon :name="data.arena.halted ? 'ph:stop-circle' : 'ph:timer'" aria-hidden="true" />
+              {{ data.arena.halted ? "halted" : "week in progress" }}
             </span>
+          </div>
+          <div class="round-progress">
+            <div>
+              <span>Round progress</span>
+              <strong>{{ Math.round(data.arena.round_progress_pct) }}%</strong>
+            </div>
+            <span class="round-progress-track" aria-hidden="true">
+              <i :style="{ width: `${data.arena.round_progress_pct}%` }" />
+            </span>
+            <small>{{ formatDateTime(data.arena.round_started_at) }} to {{ formatDateTime(data.arena.round_ends_at) }}</small>
           </div>
           <dl class="round-details">
             <div>
-              <dt>Execution</dt>
-              <dd>Robinhood live</dd>
+              <dt>Round closes</dt>
+              <dd>{{ formatRelativeTime(data.arena.round_ends_at) }}</dd>
             </div>
             <div>
-              <dt>Decision gateway</dt>
-              <dd :class="data.openrouter.configured ? 'value-positive' : 'value-negative'">
-                {{ data.openrouter.configured ? "OpenRouter ready" : "Unavailable" }}
+              <dt>Decision cycle</dt>
+              <dd>#{{ data.arena.cycle_number }} · every {{ data.arena.cycle_interval_minutes }} minutes</dd>
+            </div>
+            <div>
+              <dt>Next decision</dt>
+              <dd>{{ cycleTiming }}</dd>
+            </div>
+            <div>
+              <dt>Market session</dt>
+              <dd :class="data.arena.market_session_open ? 'value-positive' : ''">
+                {{ data.arena.market_session_open ? "US market open" : "US market closed" }}
               </dd>
             </div>
             <div>
-              <dt>Price source</dt>
-              <dd :class="data.robinhood.state === 'ready' ? 'value-positive' : 'value-negative'">
-                {{ data.robinhood.state === "ready" ? "Robinhood MCP" : "Unavailable" }}
+              <dt>Live execution</dt>
+              <dd :class="data.arena.live_armed ? 'value-positive' : ''">
+                {{ data.arena.halted ? "Halted" : data.arena.live_armed ? "Armed" : "Disarmed" }}
               </dd>
-            </div>
-            <div>
-              <dt>Capital</dt>
-              <dd>{{ formatCurrency(data.arena.allocation_per_model) }} per model</dd>
-            </div>
-            <div>
-              <dt>Next round</dt>
-              <dd>{{ formatRelativeTime(data.arena.next_round_at) }}</dd>
             </div>
           </dl>
           <div class="round-rule">
             <Icon name="ph:shield-check" aria-hidden="true" />
-            <p>Broker fills create ledger positions. Submitted orders never appear as filled until Robinhood confirms them.</p>
+            <p>{{ formatCurrency(data.arena.broker_equity ?? data.arena.capital_limit) }} broker equity verified against a {{ formatCurrency(data.arena.operator_capital_ceiling) }} operator ceiling. This week’s four ledger baselines total {{ formatCurrency(data.arena.starting_capital) }}.</p>
           </div>
         </aside>
       </header>
@@ -188,8 +206,8 @@ onBeforeUnmount(pause);
         <div class="panel chart-panel">
           <div class="panel-heading">
             <div>
-              <h2 id="performance-heading">Return since start</h2>
-              <p>Each line begins at its $250 live allocation and changes only with reconciled broker data.</p>
+              <h2 id="performance-heading">Return this week</h2>
+              <p>Each line is indexed to its own weekly opening balance and changes only with reconciled broker data.</p>
             </div>
             <div class="range-control" aria-label="Chart range">
               <button
@@ -451,13 +469,13 @@ onBeforeUnmount(pause);
       <footer class="arena-footer">
         <div>
           <strong>Execution protocol</strong>
-          <p>OpenRouter returns one structured decision per model. Confidence, cash, position size, daily loss, and broker reconciliation gates run before any live order is reviewed.</p>
+          <p>OpenRouter returns one structured decision per model in each eligible cycle. Confidence, cash, position size, daily loss, and broker reconciliation gates run before any live order is reviewed.</p>
         </div>
         <dl>
+          <div><dt>Round length</dt><dd>7 days</dd></div>
+          <div><dt>Decision cadence</dt><dd>Hourly market session</dd></div>
           <div><dt>Direction</dt><dd>Long only</dd></div>
           <div><dt>Hard stop</dt><dd>5% from entry</dd></div>
-          <div><dt>Target</dt><dd>10% from entry</dd></div>
-          <div><dt>Duplicate exposure</dt><dd>Blocked</dd></div>
         </dl>
       </footer>
     </template>

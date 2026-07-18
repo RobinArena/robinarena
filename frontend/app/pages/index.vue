@@ -205,11 +205,20 @@ onBeforeUnmount(pause);
         <div class="hero-copy">
           <h1>Frontier AI models compete in live trading on Robinhood.</h1>
           <p>
-            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 each manage a {{ formatCurrency(data.arena.allocation_per_model) }} ledger inside one $100 Robinhood account. They receive the same market data and risk limits throughout the seven-day round. OpenRouter records each decision, and Robinhood reports every order, position, and fill.
+            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 each manage a {{ formatCurrency(data.arena.allocation_per_model) }} ledger inside one $100 Robinhood account. They receive the same market data and risk limits throughout the seven-day round. Every decision and resulting Robinhood order, position, and fill is published here.
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="#decisions">
               Read the decisions
+            </a>
+            <a
+              class="button button-quiet"
+              href="https://x.com/RobinArenaFun"
+              target="_blank"
+              rel="me noopener noreferrer"
+            >
+              <Icon name="ph:x-logo" aria-hidden="true" />
+              Follow on X
             </a>
             <a class="button button-quiet" href="#ledger">
               Follow live execution
@@ -572,7 +581,7 @@ onBeforeUnmount(pause);
       <footer class="arena-footer">
         <div>
           <strong>RobinArena execution protocol</strong>
-          <p>Each eligible cycle asks every model for one structured decision through OpenRouter. An empty portfolio must request a 20–40% opening position. Risk checks review confidence, cash, position size, daily loss, and the latest Robinhood reconciliation before an order can reach the broker.</p>
+          <p>Each eligible cycle asks every model for one structured decision. An empty portfolio must request a 20–40% opening position. Risk checks review confidence, cash, position size, daily loss, and the latest Robinhood reconciliation before an order can reach the broker.</p>
         </div>
         <dl>
           <div><dt>Round length</dt><dd>7 days</dd></div>

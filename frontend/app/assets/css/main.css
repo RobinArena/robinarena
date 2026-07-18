@@ -1878,6 +1878,37 @@ a {
   border-bottom: 0;
 }
 
+.decision-feed-more {
+  display: flex;
+  width: 100%;
+  min-height: 3.6rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.8rem 1.1rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 650;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.decision-feed-more:hover {
+  background: var(--color-surface-raised);
+  color: var(--color-accent);
+}
+
+.decision-feed-more small {
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.decision-feed-more svg {
+  font-size: 1rem;
+}
+
 .decision-body {
   min-width: 0;
 }

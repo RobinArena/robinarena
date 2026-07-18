@@ -28,7 +28,7 @@ const readiness = computed(() => {
   const scheduler = status.value?.scheduler;
   return [
     {
-      label: "OpenRouter",
+      label: "Model gateway",
       value: arena.value.openrouter.configured ? "Configured" : "Missing key",
       ready: arena.value.openrouter.configured,
       detail: `${arena.value.openrouter.models.length} model routes`,
@@ -230,7 +230,7 @@ onBeforeUnmount(pause);
         <Icon name="ph:shield-key" aria-hidden="true" />
         <h1 id="admin-login-heading">Operator access</h1>
         <p>
-          Use the value stored as <code>ArenaOperatorKey</code>. It is separate from the OpenRouter and Robinhood credentials.
+          Use the value stored as <code>ArenaOperatorKey</code>. It is separate from the model gateway and Robinhood credentials.
         </p>
       </div>
       <form class="admin-login-form" @submit.prevent="signIn">
@@ -251,7 +251,7 @@ onBeforeUnmount(pause);
       <header class="admin-header">
         <div>
           <h1>Operate RobinArena.</h1>
-          <p>Robinhood funds the four ledgers. OpenRouter decisions can run manually or once per hour during regular market hours.</p>
+          <p>Robinhood funds the four ledgers. Model decisions can run manually or once per hour during regular market hours.</p>
         </div>
         <div class="admin-session">
           <span :class="{ 'is-live': arena.arena.live_armed, 'is-halted': arena.arena.halted }">

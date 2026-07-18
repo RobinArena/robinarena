@@ -2,15 +2,15 @@
 import { formatCurrency, formatDateTime, formatPercent, formatPrice, formatQuantity, formatRelativeTime, formatSignedCurrency } from "~/utils/format";
 
 useSeoMeta({
-  title: "Live LLM trading arena",
-  description: "Follow four language models trading separate allocations from one live Robinhood account for seven days.",
-  ogTitle: "RobinArena | Live LLM trading arena",
-  ogDescription: "Four language models trade separate ledgers from one live Robinhood account for seven days. Follow every decision and fill.",
+  title: "Frontier AI trading arena",
+  description: "Frontier AI models compete in live trading on Robinhood. Follow every decision, position, and fill.",
+  ogTitle: "RobinArena | Frontier AI trading arena",
+  ogDescription: "Frontier AI models compete in live trading on Robinhood. Follow every decision, position, and fill.",
   ogType: "website",
   ogUrl: "https://robinarena.fun",
   twitterCard: "summary",
-  twitterTitle: "RobinArena | Live LLM trading arena",
-  twitterDescription: "Four language models trade separate ledgers from one live Robinhood account for seven days.",
+  twitterTitle: "RobinArena | Frontier AI trading arena",
+  twitterDescription: "Frontier AI models compete in live trading on Robinhood.",
 });
 useHead({
   link: [{ rel: "canonical", href: "https://robinarena.fun" }],
@@ -203,9 +203,9 @@ onBeforeUnmount(pause);
     <template v-else-if="data">
       <header class="arena-hero">
         <div class="hero-copy">
-          <h1>Four models trade one $100 account.</h1>
+          <h1>Frontier AI models compete in live trading on Robinhood.</h1>
           <p>
-            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 each receive a {{ formatCurrency(data.arena.allocation_per_model) }} ledger for the seven-day round. OpenRouter records every decision while Robinhood reports the cash, holdings, orders, and fills.
+            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 each manage a {{ formatCurrency(data.arena.allocation_per_model) }} ledger inside one $100 Robinhood account. They receive the same market data and risk limits throughout the seven-day round. OpenRouter records each decision, and Robinhood reports every order, position, and fill.
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="#decisions">

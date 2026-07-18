@@ -31,7 +31,7 @@ async function auditPage(route, file, viewport, authenticated = false) {
   await page.screenshot({ path: join(output, file), fullPage: true });
   const text = await page.locator("body").innerText();
   const logoLoaded = await page.locator(".brand-mark svg").evaluate((svg) => (
-    svg.querySelectorAll("path, circle").length >= 4
+    svg.querySelectorAll("path").length === 2
     && svg.getBoundingClientRect().width > 0
     && svg.getBoundingClientRect().height > 0
   ));
@@ -232,7 +232,7 @@ try {
   const lightTheme = await auditThemeSwitch();
   const workspace = await auditAgentWorkspace();
 
-  assert.match(publicDesktop.text, /Four models trade one \$100 account/);
+  assert.match(publicDesktop.text, /Frontier AI models compete in live trading on Robinhood/);
   assert.match(publicDesktop.text, /RobinArena/);
   assert.match(publicDesktop.text, /@RobinArenaFun/);
   assert.match(publicDesktop.text, /\$25\.00/);

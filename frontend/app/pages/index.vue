@@ -87,34 +87,49 @@ const filteredOrders = computed(() => {
     : data.value.orders.filter((order) => order.agent_id === selectedModel.value);
 });
 
-const summaryMetrics = computed(() => data.value ? [
-  {
-    label: "Combined equity",
-    value: formatCurrency(data.value.arena.total_equity),
-    detail: `${formatSignedCurrency(data.value.arena.total_pnl)} since the week opened`,
-    tone: data.value.arena.total_pnl >= 0 ? "positive" : "negative",
-  },
-  {
-    label: "Weekly return",
-    value: formatPercent(data.value.arena.return_pct),
-    detail: `Measured from the ${formatCurrency(data.value.arena.starting_capital)} opening balance`,
-    tone: data.value.arena.return_pct >= 0 ? "positive" : "negative",
-  },
-  {
-    label: "Open positions",
-    value: String(data.value.arena.open_positions),
-    detail: data.value.arena.pending_orders === 0
-      ? "No orders awaiting a broker update"
-      : `${data.value.arena.pending_orders} ${data.value.arena.pending_orders === 1 ? "order" : "orders"} awaiting a broker update`,
-    tone: "neutral",
-  },
-  {
-    label: "Current leader",
-    value: leader.value?.name || "Pending",
-    detail: leader.value ? `${formatPercent(leader.value.return_pct)} this week` : "Waiting for results",
-    tone: "leader",
-  },
-] : []);
+const summaryMetrics = computed(() => {
+  if (!data.value) return [];
+  const arena = data.value.arena;
+  const hasBrokerEquity = arena.broker_equity != null;
+  const accountEquity = arena.broker_equity ?? arena.total_equity;
+  const accountPnl = hasBrokerEquity
+    ? accountEquity - arena.starting_capital
+    : arena.total_pnl;
+  const accountReturn = arena.starting_capital > 0
+    ? (accountPnl / arena.starting_capital) * 100
+    : 0;
+
+  return [
+    {
+      label: hasBrokerEquity ? "Robinhood equity" : "Combined equity",
+      value: formatCurrency(accountEquity),
+      detail: `${formatSignedCurrency(accountPnl)} from the ${formatCurrency(arena.starting_capital)} opening balance`,
+      tone: accountPnl >= 0 ? "positive" : "negative",
+    },
+    {
+      label: hasBrokerEquity ? "Account return" : "Weekly return",
+      value: formatPercent(accountReturn),
+      detail: hasBrokerEquity
+        ? "Calculated from Robinhood’s reported equity"
+        : "Calculated from the four model ledgers",
+      tone: accountReturn >= 0 ? "positive" : "negative",
+    },
+    {
+      label: "Open positions",
+      value: String(arena.open_positions),
+      detail: arena.pending_orders === 0
+        ? "No orders awaiting a broker update"
+        : `${arena.pending_orders} ${arena.pending_orders === 1 ? "order" : "orders"} awaiting a broker update`,
+      tone: "neutral",
+    },
+    {
+      label: "Current leader",
+      value: leader.value?.name || "Pending",
+      detail: leader.value ? `${formatPercent(leader.value.return_pct)} this week` : "Waiting for results",
+      tone: "leader",
+    },
+  ];
+});
 
 watch(
   () => data.value?.models.map((model) => model.id).join(","),

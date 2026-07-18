@@ -445,12 +445,12 @@ onBeforeUnmount(pause);
             <thead><tr><th>Model</th><th>Order</th><th>Requested</th><th>Filled</th><th>Status</th><th>Age</th></tr></thead>
             <tbody>
               <tr v-for="order in arena.orders" :key="order.id">
-                <td>{{ order.agent_name }}</td>
-                <td><strong>{{ order.side.toUpperCase() }} {{ order.symbol }}</strong></td>
-                <td>{{ order.requested_amount ? formatCurrency(order.requested_amount) : `${formatQuantity(order.requested_quantity)} shares` }}</td>
-                <td>{{ order.filled_quantity ? `${formatQuantity(order.filled_quantity)} shares` : "Pending" }}</td>
-                <td><span class="broker-status">{{ order.status.replaceAll("_", " ") }}</span></td>
-                <td>{{ formatRelativeTime(order.created_at) }}</td>
+                <td data-label="Model">{{ order.agent_name }}</td>
+                <td data-label="Order"><strong>{{ order.side.toUpperCase() }} {{ order.symbol }}</strong></td>
+                <td data-label="Requested">{{ order.requested_amount ? formatCurrency(order.requested_amount) : `${formatQuantity(order.requested_quantity)} shares` }}</td>
+                <td data-label="Filled">{{ order.filled_quantity ? `${formatQuantity(order.filled_quantity)} shares` : "Pending" }}</td>
+                <td data-label="Status"><span class="broker-status">{{ order.status.replaceAll("_", " ") }}</span></td>
+                <td data-label="Age">{{ formatRelativeTime(order.created_at) }}</td>
               </tr>
             </tbody>
           </table>

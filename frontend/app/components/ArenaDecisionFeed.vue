@@ -2,18 +2,40 @@
 import type { api } from "~/generated/encore-client";
 import { formatClock, formatCurrency } from "~/utils/format";
 
-defineProps<{
+const props = defineProps<{
   decisions: api.ArenaDecision[];
 }>();
 
 const emit = defineEmits<{
   inspect: [id: string];
 }>();
+
+const decisionPageSize = 8;
+const visibleCount = ref(decisionPageSize);
+const visibleDecisions = computed(() => props.decisions.slice(0, visibleCount.value));
+const remainingDecisions = computed(() => Math.max(
+  0,
+  props.decisions.length - visibleDecisions.value.length,
+));
+
+watch(
+  () => props.decisions.map((decision) => decision.id).join(","),
+  () => {
+    visibleCount.value = decisionPageSize;
+  },
+);
+
+function loadMoreDecisions() {
+  visibleCount.value = Math.min(
+    visibleCount.value + decisionPageSize,
+    props.decisions.length,
+  );
+}
 </script>
 
 <template>
   <div v-if="decisions.length" class="decision-feed">
-    <article v-for="decision in decisions.slice(0, 16)" :key="decision.id" class="decision-item">
+    <article v-for="decision in visibleDecisions" :key="decision.id" class="decision-item">
       <ModelGlyph :code="decision.agent_code" :accent="decision.agent_accent" size="small" />
       <div class="decision-body">
         <div class="decision-meta">
@@ -43,6 +65,16 @@ const emit = defineEmits<{
         {{ Math.round(decision.confidence * 100) }}%
       </span>
     </article>
+    <button
+      v-if="remainingDecisions > 0"
+      class="decision-feed-more"
+      type="button"
+      @click="loadMoreDecisions"
+    >
+      <span>Load more decisions</span>
+      <small>{{ remainingDecisions }} remaining</small>
+      <Icon name="ph:arrow-line-down" aria-hidden="true" />
+    </button>
   </div>
   <div v-else class="empty-state is-compact">
     <Icon name="ph:waveform" aria-hidden="true" />

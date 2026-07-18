@@ -36,12 +36,13 @@ async function auditPage(route, file, viewport, authenticated = false) {
     && svg.getBoundingClientRect().height > 0
   ));
   const xProfileHref = await page.locator('a[href="https://x.com/RobinArenaFun"]').first().getAttribute("href");
+  const xProfileLinkCount = await page.locator('a[href="https://x.com/RobinArenaFun"]').count();
   const fontFamily = await page.locator("body").evaluate((element) => getComputedStyle(element).fontFamily);
   const horizontalOverflow = await page.evaluate(() => (
     document.documentElement.scrollWidth - document.documentElement.clientWidth
   ));
   await context.close();
-  return { text, logoLoaded, xProfileHref, fontFamily, horizontalOverflow };
+  return { text, logoLoaded, xProfileHref, xProfileLinkCount, fontFamily, horizontalOverflow };
 }
 
 async function auditThemeSwitch() {
@@ -245,10 +246,12 @@ try {
   assert.match(publicDesktop.text, /Select a model to see its reasoning/);
   assert.doesNotMatch(
     publicDesktop.text,
-    /Live feed connected|Public data refreshes every 20 seconds|Robinhood reconciled|Robinhood live/,
+    /Live feed connected|Public data refreshes every 20 seconds|Robinhood reconciled|Robinhood live|OpenRouter/,
   );
   assert.doesNotMatch(publicDesktop.text, /Open operator console|\bAdmin\b/);
   assert.equal(publicDesktop.xProfileHref, "https://x.com/RobinArenaFun");
+  assert.equal(publicDesktop.xProfileLinkCount, 2);
+  assert.equal(publicMobile.xProfileLinkCount, 2);
   assert.doesNotMatch(publicDesktop.text, /\$1,000|\$250|\$100K|paper fills|replay tape/i);
   assert.equal(publicDesktop.logoLoaded && publicMobile.logoLoaded, true);
   assert.match(publicDesktop.fontFamily, /Onest/);

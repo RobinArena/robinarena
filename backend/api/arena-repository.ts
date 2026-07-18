@@ -162,6 +162,7 @@ interface PositionRow {
   unrealized_pnl: string | number;
   stop_loss: string | number;
   take_profit: string | number;
+  broker_order_id: string;
   opened_at: Date | string;
 }
 
@@ -226,6 +227,7 @@ interface TradeRow {
   realized_pnl: string | number | null;
   return_pct: string | number | null;
   status: "open" | "closed";
+  broker_order_id: string;
   opened_at: Date | string;
   closed_at: Date | string | null;
   exit_reason: string | null;
@@ -393,9 +395,10 @@ export async function listPositions(): Promise<ArenaPosition[]> {
     SELECT p.id, p.agent_id, a.name AS agent_name, a.code AS agent_code,
       a.accent AS agent_accent, p.symbol, p.quantity, p.average_entry_price,
       p.current_price, p.market_value, p.unrealized_pnl, p.stop_loss,
-      p.take_profit, p.opened_at
+      p.take_profit, source_order.broker_order_id, p.opened_at
     FROM arena_positions p
     JOIN arena_agents a ON a.id = p.agent_id
+    JOIN arena_orders source_order ON source_order.id = p.source_order_id
     WHERE p.status = 'open'
     ORDER BY abs(p.unrealized_pnl) DESC, p.opened_at DESC
   `;
@@ -417,6 +420,7 @@ export async function listPositions(): Promise<ArenaPosition[]> {
       return_pct: entry === 0 ? 0 : ((current - entry) / entry) * 100,
       stop_loss: numeric(row.stop_loss),
       take_profit: numeric(row.take_profit),
+      broker_order_id: row.broker_order_id,
       opened_at: timestamp(row.opened_at),
     };
   });
@@ -493,9 +497,10 @@ export async function listOrders(): Promise<ArenaOrder[]> {
 export async function listTrades(): Promise<ArenaTrade[]> {
   const rows = await db.queryAll<TradeRow>`
     SELECT t.*, a.name AS agent_name, a.code AS agent_code,
-      a.accent AS agent_accent
+      a.accent AS agent_accent, source_order.broker_order_id
     FROM arena_trades t
     JOIN arena_agents a ON a.id = t.agent_id
+    JOIN arena_orders source_order ON source_order.id = t.source_order_id
     ORDER BY coalesce(t.closed_at, t.opened_at) DESC
     LIMIT 32
   `;
@@ -512,6 +517,7 @@ export async function listTrades(): Promise<ArenaTrade[]> {
     realized_pnl: row.realized_pnl === null ? undefined : numeric(row.realized_pnl),
     return_pct: row.return_pct === null ? undefined : numeric(row.return_pct),
     status: row.status,
+    broker_order_id: row.broker_order_id,
     opened_at: timestamp(row.opened_at),
     closed_at: row.closed_at ? timestamp(row.closed_at) : undefined,
     exit_reason: row.exit_reason || undefined,

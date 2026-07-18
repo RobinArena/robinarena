@@ -284,6 +284,7 @@ export namespace api {
         "return_pct": number
         "stop_loss": number
         "take_profit": number
+        "broker_order_id": string
         "opened_at": string
     }
 
@@ -372,6 +373,7 @@ export namespace api {
         "realized_pnl"?: number
         "return_pct"?: number
         status: "open" | "closed"
+        "broker_order_id": string
         "opened_at": string
         "closed_at"?: string
         "exit_reason"?: string

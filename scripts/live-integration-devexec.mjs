@@ -338,7 +338,7 @@ const openrouter = createServer(async (request, response) => {
         content: JSON.stringify({
           action,
           symbol,
-          confidence: 0.91,
+          confidence: payload.model === "deepseek/deepseek-v4-pro" ? 91 : 0.91,
           allocation_pct: action === "buy" ? (outsideRegularHours ? 40 : 20) : 0,
           rationale: `Verified test decision for ${symbol}.`,
         }),
@@ -440,6 +440,11 @@ try {
   assert.equal(arena.decisions.every((decision) => decision.source === "openrouter"), true);
   assert.equal(arena.decisions.every((decision) => decision.round_number === 1), true);
   assert.equal(arena.decisions.every((decision) => decision.cycle_number === 1), true);
+  assert.equal(
+    arena.decisions.find((decision) => decision.agent_id === "deepseek-v4-pro")?.confidence,
+    0.91,
+    "percentage confidence is normalized without discarding the model decision",
+  );
   if (outsideRegularHours) {
     assert.equal(
       arena.positions.every((position) => Number.isInteger(position.quantity)),

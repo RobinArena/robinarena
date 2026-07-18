@@ -148,14 +148,19 @@ function parseDecision(
   }
   const symbol = typeof value.symbol === "string" ? value.symbol.trim().toUpperCase() : "";
   if (!symbols.has(symbol)) throw new Error("OpenRouter selected a symbol outside the shared market");
-  const confidence = optionalNumber(value.confidence);
-  if (confidence === undefined || confidence < 0 || confidence > 1) {
+  const reportedConfidence = optionalNumber(value.confidence);
+  if (reportedConfidence === undefined) {
     throw new Error("OpenRouter returned invalid confidence");
   }
-  const allocation = optionalNumber(value.allocation_pct);
-  if (allocation === undefined || allocation < 0 || allocation > 40) {
+  const confidence = Math.min(
+    1,
+    Math.max(0, reportedConfidence > 1 ? reportedConfidence / 100 : reportedConfidence),
+  );
+  const reportedAllocation = optionalNumber(value.allocation_pct);
+  if (reportedAllocation === undefined) {
     throw new Error("OpenRouter returned invalid allocation");
   }
+  const allocation = Math.min(40, Math.max(0, reportedAllocation));
   const rationale = typeof value.rationale === "string" ? value.rationale.trim() : "";
   if (!rationale || rationale.length > 320) throw new Error("OpenRouter returned invalid rationale");
 

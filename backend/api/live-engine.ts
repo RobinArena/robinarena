@@ -1810,13 +1810,9 @@ export async function scheduledLiveRound(): Promise<void> {
       (entry) => entry.status !== "skipped",
     );
     const failedModels = attemptedModels.filter((entry) => entry.status === "failed");
-    if (failedModels.length > 0) {
-      retryCycleOnFailure = failedModels.length === attemptedModels.length;
-      throw new Error(
-        retryCycleOnFailure
-          ? "Every active model failed this decision cycle"
-          : `${failedModels.length} active model decision${failedModels.length === 1 ? "" : "s"} failed this cycle`,
-      );
+    if (attemptedModels.length > 0 && failedModels.length === attemptedModels.length) {
+      retryCycleOnFailure = true;
+      throw new Error("Every active model failed this decision cycle");
     }
     await markSchedulerSuccess();
   } catch (cause) {

@@ -39,11 +39,6 @@ const cycleTiming = computed(() => {
     ? Date.parse(data.value.generated_at)
     : Date.now();
   const nextCycleAt = Date.parse(current.next_cycle_at);
-  if (!current.market_session_open) {
-    return nextCycleAt > generatedAt
-      ? formatDateTime(current.next_cycle_at)
-      : "Next market session";
-  }
   return nextCycleAt <= generatedAt
     ? "Due now"
     : formatRelativeTime(current.next_cycle_at);
@@ -271,7 +266,7 @@ onBeforeUnmount(pause);
             </div>
             <div>
               <dt>Decision cadence</dt>
-              <dd>Hourly in market hours</dd>
+              <dd>Hourly, around the clock</dd>
             </div>
             <div>
               <dt>Next decision</dt>
@@ -314,8 +309,8 @@ onBeforeUnmount(pause);
         <div class="panel chart-panel">
           <div class="panel-heading">
             <div>
-              <h2 id="performance-heading">Return during market hours</h2>
-              <p>Each line uses five-minute reconciliations during the regular U.S. session. Lines pause overnight, on weekends, and on market holidays.</p>
+              <h2 id="performance-heading">Portfolio return</h2>
+              <p>Each line records broker-reconciled equity changes. Periods without a new account value appear as gaps instead of artificial flat extensions.</p>
             </div>
             <div class="range-control" role="group" aria-label="Chart range">
               <button
@@ -453,7 +448,7 @@ onBeforeUnmount(pause);
           <div class="panel-heading">
             <div>
               <h2 id="decisions-heading">Decision stream</h2>
-              <p>The models’ reasoning and risk results, newest first.</p>
+              <p>The models’ reasoning, actions, and broker results, newest first.</p>
             </div>
             <label class="model-filter">
               <span>Model</span>
@@ -489,7 +484,7 @@ onBeforeUnmount(pause);
                   <th scope="col">Entry</th>
                   <th scope="col">Mark</th>
                   <th scope="col">Open P&amp;L</th>
-                  <th scope="col">Stop</th>
+                  <th scope="col">Stop reference</th>
                 </tr>
               </thead>
               <tbody>
@@ -591,13 +586,13 @@ onBeforeUnmount(pause);
       <footer class="arena-footer">
         <div>
           <strong>RobinArena execution protocol</strong>
-          <p>Each eligible cycle asks every model for one structured decision. An empty portfolio must request a 20–40% opening position. Risk checks review confidence, cash, position size, daily loss, and the latest Robinhood reconciliation before an order can reach the broker.</p>
+          <p>Every hourly cycle asks each model to buy, sell, or hold. The account layer enforces the shared capital ceiling, each model’s available cash, long-only positions, and one pending order at a time. Robinhood reviews every submitted order.</p>
         </div>
         <dl>
           <div><dt>Round length</dt><dd>7 days</dd></div>
-          <div><dt>Decision cadence</dt><dd>Every market hour</dd></div>
+          <div><dt>Decision cadence</dt><dd>Every hour</dd></div>
           <div><dt>Direction</dt><dd>Long only</dd></div>
-          <div><dt>Hard stop</dt><dd>5% from entry</dd></div>
+          <div><dt>Decision control</dt><dd>Model owned</dd></div>
         </dl>
       </footer>
     </template>

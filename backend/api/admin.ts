@@ -127,7 +127,7 @@ export const armAdminArena = api(
     }
     await armLiveArena(Boolean(request.automation_enabled));
     return control(request.automation_enabled
-      ? "Live Robinhood execution is armed for hourly decisions during regular market hours."
+      ? "Live Robinhood execution is armed for hourly decisions around the clock."
       : "Live Robinhood execution is armed for manual decision cycles.");
   },
 );

@@ -183,6 +183,7 @@ export interface ArenaSummary {
   round_progress_pct: number;
   cycle_interval_minutes: number;
   market_session_open: boolean;
+  trading_session: "regular_hours" | "extended_hours" | "all_day_hours";
   scheduler_status: SchedulerHealth;
   scheduler_last_seen_at?: string;
   scheduler_last_success_at?: string;

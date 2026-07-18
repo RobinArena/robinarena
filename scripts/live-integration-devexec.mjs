@@ -1,19 +1,40 @@
 const { createServer } = await import("node:http");
 
+const supportedTradingSessions = new Set([
+  "regular_hours",
+  "extended_hours",
+  "all_day_hours",
+]);
+const tradingSession = supportedTradingSessions.has(process.env.ARENA_TEST_TRADING_SESSION)
+  ? process.env.ARENA_TEST_TRADING_SESSION
+  : "regular_hours";
+const outsideRegularHours = tradingSession !== "regular_hours";
 const prices = {
+  ACHR: 4.47,
   AMZN: 210,
+  JOBY: 7.23,
+  LCID: 7.18,
   META: 640,
   MSFT: 505,
   NVDA: 170,
+  PAGS: 9.07,
+  SOUN: 6.27,
   SPY: 690,
   TSLA: 430,
 };
-const modelSymbols = {
-  "openai/gpt-5.6-sol": "AMZN",
-  "deepseek/deepseek-v4-pro": "META",
-  "anthropic/claude-fable-5": "MSFT",
-  "x-ai/grok-4.5": "NVDA",
-};
+const modelSymbols = outsideRegularHours
+  ? {
+      "openai/gpt-5.6-sol": "ACHR",
+      "deepseek/deepseek-v4-pro": "JOBY",
+      "anthropic/claude-fable-5": "PAGS",
+      "x-ai/grok-4.5": "SOUN",
+    }
+  : {
+      "openai/gpt-5.6-sol": "AMZN",
+      "deepseek/deepseek-v4-pro": "META",
+      "anthropic/claude-fable-5": "MSFT",
+      "x-ai/grok-4.5": "NVDA",
+    };
 const orders = [];
 const toolCalls = new Map();
 const mcpAuthorizationHeaders = new Set();
@@ -117,15 +138,38 @@ const mcp = createServer(async (request, response) => {
     mcpToolError(response, envelope, `${name} requires the Agentic account_number`);
     return;
   }
-  if ((name === "review_equity_order" || name === "place_equity_order")
-    && (args.type !== "market" || "order_type" in args)) {
-    mcpToolError(response, envelope, `${name} requires type=market`);
-    return;
+  if (name === "review_equity_order" || name === "place_equity_order") {
+    const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!validUuid.test(args.ref_id || "")) {
+      mcpToolError(response, envelope, `${name} requires a stable UUID ref_id`);
+      return;
+    }
+    if (outsideRegularHours) {
+      if (
+        args.type !== "limit"
+        || args.market_hours !== tradingSession
+        || typeof args.quantity !== "string"
+        || !Number.isInteger(Number(args.quantity))
+        || typeof args.limit_price !== "string"
+        || "dollar_amount" in args
+      ) {
+        mcpToolError(response, envelope, `${name} requires a whole-share limit outside regular hours`);
+        return;
+      }
+    } else if (
+      args.type !== "market"
+      || args.market_hours !== "regular_hours"
+      || "order_type" in args
+    ) {
+      mcpToolError(response, envelope, `${name} requires a regular-hours market order`);
+      return;
+    }
   }
-  if ((name === "review_equity_order" || name === "place_equity_order")
+  if (!outsideRegularHours
+    && (name === "review_equity_order" || name === "place_equity_order")
     && args.side === "buy"
     && (typeof args.dollar_amount !== "string" || "amount" in args)) {
-    mcpToolError(response, envelope, `${name} requires dollar_amount as a string for buys`);
+    mcpToolError(response, envelope, `${name} requires dollar_amount as a string for regular-hours buys`);
     return;
   }
   if ((name === "review_equity_order" || name === "place_equity_order")
@@ -172,7 +216,22 @@ const mcp = createServer(async (request, response) => {
       guide: "Test orders response",
     };
   } else if (name === "get_equity_tradability") {
-    payload = { instruments: (args.symbols || [args.symbol]).map((symbol) => ({ symbol, tradable: true, fractionable: true })) };
+    payload = {
+      data: {
+        results: (args.symbols || [args.symbol]).map((symbol) => ({
+          symbol,
+          state: "active",
+          tradeable: true,
+          fractional_tradability: "tradable",
+          extended_hours_fractional_tradability: false,
+          all_day_tradability: "tradable",
+          account_type_tradabilities: [{
+            account_type: "agentic",
+            account_type_tradability: "tradable",
+          }],
+        })),
+      },
+    };
   } else if (name === "review_equity_order") {
     payload = { review: { status: "approved", symbol: args.symbol, side: args.side } };
   } else if (name === "place_equity_order") {
@@ -182,6 +241,8 @@ const mcp = createServer(async (request, response) => {
       order_id: `broker-${orders.length + 1}`,
       symbol: args.symbol,
       side: args.side,
+      type: args.type,
+      market_hours: args.market_hours,
       status: "filled",
       dollar_amount: args.dollar_amount,
       quantity,
@@ -259,13 +320,15 @@ const openrouter = createServer(async (request, response) => {
     response.end(JSON.stringify({ error: { message: "temporary model gateway failure" } }));
     return;
   }
-  decisionInputs.push(JSON.parse(payload.messages[1].content));
+  const decisionInput = JSON.parse(payload.messages[1].content);
+  decisionInputs.push(decisionInput);
   decisionSchemas.push(payload.response_format.json_schema.schema);
   openRouterRequests += 1;
   await new Promise((resolve) => setTimeout(resolve, 120));
   const symbol = modelSymbols[payload.model];
-  const allowedActions = payload.response_format.json_schema.schema.properties.action.enum;
-  const action = allowedActions.length === 1 ? allowedActions[0] : "sell";
+  const action = decisionInput.portfolio.positions.some(
+    (position) => position.symbol === symbol,
+  ) ? "sell" : "buy";
   openRouterInFlight -= 1;
   json(response, {
     id: `generation-${payload.model}`,
@@ -276,7 +339,7 @@ const openrouter = createServer(async (request, response) => {
           action,
           symbol,
           confidence: 0.91,
-          allocation_pct: action === "buy" ? 20 : 0,
+          allocation_pct: action === "buy" ? (outsideRegularHours ? 40 : 20) : 0,
           rationale: `Verified test decision for ${symbol}.`,
         }),
       },
@@ -314,7 +377,7 @@ try {
   assert.equal(
     initial.market.length === 0
       || (
-        initial.market.length === 6
+        (initial.market.length === 6 || initial.market.length === 11)
         && initial.market.every((quote) => quote.source === "robinhood_mcp")
       ),
     true,
@@ -340,7 +403,7 @@ try {
   assert.equal(oauthStatus.scheduler.status, "inactive");
   assert.equal(oauthStatus.scheduler.consecutive_failures, 0);
   const sync = await apiJson("/admin/sync", { method: "POST", headers });
-  assert.equal(sync.status.arena.market.length, 6);
+  assert.equal(sync.status.arena.market.length, 11);
   assert.deepEqual(sync.status.arena.models.map((model) => model.initial_balance), [25, 25, 25, 25]);
   assert.equal(sync.status.arena.arena.capital_limit, 100);
   assert.equal(sync.status.broker.equity, 100);
@@ -377,7 +440,20 @@ try {
   assert.equal(arena.decisions.every((decision) => decision.source === "openrouter"), true);
   assert.equal(arena.decisions.every((decision) => decision.round_number === 1), true);
   assert.equal(arena.decisions.every((decision) => decision.cycle_number === 1), true);
-  assert.equal(arena.models.every((model) => model.cash_balance === 20), true);
+  if (outsideRegularHours) {
+    assert.equal(
+      arena.positions.every((position) => Number.isInteger(position.quantity)),
+      true,
+      "orders outside regular hours use whole shares",
+    );
+    assert.equal(
+      arena.models.every((model) => model.cash_balance < 25),
+      true,
+      "whole-share buys outside regular hours debit each model ledger",
+    );
+  } else {
+    assert.equal(arena.models.every((model) => model.cash_balance === 20), true);
+  }
   assert.equal(arena.arena.round_number, 1, "weekly round after entry cycle");
   assert.equal(arena.arena.cycle_number, 1, "entry decision cycle number");
   assert.equal(arena.arena.total_equity, 100);
@@ -391,11 +467,21 @@ try {
   assert.equal(openRouterAttempts, 5, "one transient model failure was retried");
   assert.equal(
     decisionSchemas.slice(0, 4).every((schema) => (
-      schema.properties.action.enum.length === 1
-      && schema.properties.action.enum[0] === "buy"
+      schema.properties.action.enum.length === 3
+      && schema.properties.action.enum.includes("buy")
+      && schema.properties.action.enum.includes("sell")
+      && schema.properties.action.enum.includes("hold")
     )),
     true,
-    "empty ledgers require an opening buy",
+    "empty ledgers leave buy, sell, and hold under model control",
+  );
+  assert.equal(
+    decisionInputs.slice(0, 4).every((input) => (
+      input.execution.market_hours === tradingSession
+      && input.execution.whole_shares_only === outsideRegularHours
+    )),
+    true,
+    "models receive the active broker execution session",
   );
   assert.equal(
     decisionSchemas.every((schema) => (
@@ -488,6 +574,7 @@ try {
     ],
   );
   return {
+    trading_session: tradingSession,
     allocations: arena.models.map((model) => model.initial_balance),
     verified_quotes: arena.market.length,
     reconciled_fills: arena.orders.length,

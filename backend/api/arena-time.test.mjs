@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  arenaTradingSession,
+  arenaTradingSessionOpen,
   nextDecisionCycleAt,
   regularMarketSessionOpen,
   SCHEDULED_CYCLE_GRACE_MINUTES,
@@ -15,23 +17,61 @@ test("regular market sessions exclude closed periods and exchange holidays", () 
   assert.equal(regularMarketSessionOpen(new Date("2026-04-03T14:00:00Z")), false);
 });
 
-test("early-close sessions stop live cycles at 1 PM Eastern", () => {
-  assert.equal(regularMarketSessionOpen(new Date("2026-11-27T17:30:00Z")), true);
-  assert.equal(regularMarketSessionOpen(new Date("2026-11-27T18:00:00Z")), false);
+test("broker order sessions are classified without blocking the arena clock", () => {
+  assert.equal(
+    arenaTradingSession(new Date("2026-07-17T11:30:00Z")),
+    "extended_hours",
+  );
+  assert.equal(
+    arenaTradingSession(new Date("2026-07-17T14:00:00Z")),
+    "regular_hours",
+  );
+  assert.equal(
+    arenaTradingSession(new Date("2026-07-17T20:30:00Z")),
+    "extended_hours",
+  );
+  assert.equal(arenaTradingSessionOpen(new Date("2026-07-17T23:59:00Z")), true);
+  assert.equal(
+    arenaTradingSession(new Date("2026-07-18T00:00:00Z")),
+    "all_day_hours",
+  );
+  assert.equal(arenaTradingSessionOpen(new Date("2026-07-18T00:00:00Z")), true);
 });
 
-test("automatic cycles use fixed hourly market slots", () => {
+test("early-close days retain Robinhood's shortened extended session", () => {
+  assert.equal(regularMarketSessionOpen(new Date("2026-11-27T17:30:00Z")), true);
+  assert.equal(regularMarketSessionOpen(new Date("2026-11-27T18:00:00Z")), false);
+  assert.equal(
+    arenaTradingSession(new Date("2026-11-27T18:00:00Z")),
+    "extended_hours",
+  );
+  assert.equal(arenaTradingSessionOpen(new Date("2026-11-27T21:59:00Z")), true);
+  assert.equal(
+    arenaTradingSession(new Date("2026-11-27T22:00:00Z")),
+    "all_day_hours",
+  );
+});
+
+test("automatic cycles use fixed hourly slots around the clock", () => {
   assert.equal(
     nextDecisionCycleAt(new Date("2026-07-18T00:46:00Z")).toISOString(),
-    "2026-07-20T13:35:00.000Z",
+    "2026-07-18T01:35:00.000Z",
   );
   assert.equal(
     nextDecisionCycleAt(new Date("2026-07-20T13:36:00Z")).toISOString(),
     "2026-07-20T14:35:00.000Z",
   );
   assert.equal(
+    nextDecisionCycleAt(new Date("2026-07-17T20:00:00Z")).toISOString(),
+    "2026-07-17T20:35:00.000Z",
+  );
+  assert.equal(
+    nextDecisionCycleAt(new Date("2026-07-17T23:36:00Z")).toISOString(),
+    "2026-07-18T00:35:00.000Z",
+  );
+  assert.equal(
     nextDecisionCycleAt(new Date("2026-11-27T17:36:00Z")).toISOString(),
-    "2026-11-30T14:35:00.000Z",
+    "2026-11-27T18:35:00.000Z",
   );
   assert.equal(SCHEDULED_CYCLE_GRACE_MINUTES, 15);
 });

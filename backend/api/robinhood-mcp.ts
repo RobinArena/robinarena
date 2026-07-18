@@ -69,6 +69,9 @@ export interface RobinhoodOrderRequest {
   side: "buy" | "sell";
   amount?: number;
   quantity?: number;
+  limitPrice?: number;
+  marketHours?: "regular_hours" | "extended_hours" | "all_day_hours";
+  refId: string;
 }
 
 export interface RobinhoodOrderResult {
@@ -279,10 +282,23 @@ export class RobinhoodMcpClient {
       if (!symbol || !requested.includes(symbol)) continue;
       const bid = numberField(record, ["bid_price", "bid", "best_bid"]);
       const ask = numberField(record, ["ask_price", "ask", "best_ask"]);
-      const last = numberField(record, ["last_trade_price", "last_price", "price", "mark_price"]);
-      const price = last || (bid && ask ? (bid + ask) / 2 : bid || ask);
+      const regularLast = numberField(record, ["last_trade_price", "last_price", "price", "mark_price"]);
+      const nonRegularLast = numberField(record, ["last_non_reg_trade_price"]);
+      const regularAsOf = stringField(record, ["venue_last_trade_time", "updated_at", "as_of", "timestamp"]);
+      const nonRegularAsOf = stringField(record, ["venue_last_non_reg_trade_time"]);
+      const regularTime = regularAsOf ? new Date(regularAsOf).getTime() : 0;
+      const nonRegularTime = nonRegularAsOf ? new Date(nonRegularAsOf).getTime() : 0;
+      const latestLast = nonRegularLast && nonRegularTime >= regularTime
+        ? nonRegularLast
+        : regularLast;
+      const price = latestLast || (bid && ask ? (bid + ask) / 2 : bid || ask);
       if (!price || price <= 0) continue;
-      const previous = numberField(record, ["previous_close", "previous_close_price", "prior_close"]);
+      const previous = numberField(record, [
+        "adjusted_previous_close",
+        "previous_close",
+        "previous_close_price",
+        "prior_close",
+      ]);
       if (!quotes.has(symbol)) {
         quotes.set(symbol, {
           symbol,
@@ -290,7 +306,9 @@ export class RobinhoodMcpClient {
           previous_close: previous && previous > 0 ? previous : price,
           bid,
           ask,
-          as_of: stringField(record, ["updated_at", "as_of", "timestamp"]) || now,
+          as_of: nonRegularLast && nonRegularTime >= regularTime
+            ? nonRegularAsOf || now
+            : regularAsOf || now,
         });
       }
     }
@@ -399,19 +417,33 @@ export class RobinhoodMcpClient {
       throw new Error("Robinhood equity orders require either an amount or a quantity");
     }
     const agenticAccount = await this.agenticAccount();
+    const marketHours = order.marketHours || "regular_hours";
+    const wholeShareLimit = marketHours !== "regular_hours";
+    if (wholeShareLimit) {
+      if (
+        order.amount !== undefined
+        || !order.quantity
+        || !Number.isInteger(order.quantity)
+        || order.quantity < 1
+      ) {
+        throw new Error("Robinhood orders outside regular hours require a positive whole-share quantity");
+      }
+      if (!order.limitPrice || order.limitPrice <= 0) {
+        throw new Error("Robinhood orders outside regular hours require a positive limit price");
+      }
+    }
     const args: Record<string, unknown> = {
       account_number: agenticAccount.accountNumber,
       symbol: order.symbol,
       side: order.side,
-      type: "market",
+      type: wholeShareLimit ? "limit" : "market",
       time_in_force: "gfd",
+      market_hours: marketHours,
+      ref_id: order.refId,
       ...(order.amount !== undefined ? { dollar_amount: String(order.amount) } : {}),
       ...(order.quantity !== undefined ? { quantity: String(order.quantity) } : {}),
+      ...(wholeShareLimit ? { limit_price: String(order.limitPrice) } : {}),
     };
-    await this.callTool("get_equity_tradability", {
-      account_number: agenticAccount.accountNumber,
-      symbols: [order.symbol],
-    });
     const review = await this.callTool("review_equity_order", args);
     const payload = await this.callTool("place_equity_order", args);
     const brokerOrderId = collectRecords(payload)

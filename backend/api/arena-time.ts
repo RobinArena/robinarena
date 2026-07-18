@@ -1,6 +1,10 @@
 export const COMPETITION_ROUND_DAYS = 7;
 export const DECISION_CYCLE_MINUTES = 60;
 export const SCHEDULED_CYCLE_GRACE_MINUTES = 15;
+export type ArenaTradingSession =
+  | "regular_hours"
+  | "extended_hours"
+  | "all_day_hours";
 
 const marketClock = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
@@ -22,12 +26,13 @@ interface MarketClockParts {
   minute: number;
 }
 
-const MARKET_OPEN_MINUTES = 9 * 60 + 30;
+const EXTENDED_MARKET_OPEN_MINUTES = 7 * 60;
+const REGULAR_MARKET_OPEN_MINUTES = 9 * 60 + 30;
 const REGULAR_MARKET_CLOSE_MINUTES = 16 * 60;
-const EARLY_MARKET_CLOSE_MINUTES = 13 * 60;
-const FIRST_DECISION_OFFSET_MINUTES = 5;
-const SCHEDULER_TICK_MINUTES = 5;
-const MAX_SCHEDULE_LOOKAHEAD_DAYS = 8;
+const EXTENDED_MARKET_CLOSE_MINUTES = 20 * 60;
+const EARLY_REGULAR_MARKET_CLOSE_MINUTES = 13 * 60;
+const EARLY_EXTENDED_MARKET_CLOSE_MINUTES = 17 * 60;
+const DECISION_MINUTE = 35;
 
 function marketClockParts(at: Date): MarketClockParts | undefined {
   const parts = Object.fromEntries(
@@ -144,49 +149,68 @@ function earlyCloseDays(year: number): Set<string> {
   return earlyCloses;
 }
 
-function marketCloseMinutes(parts: MarketClockParts): number | undefined {
+function regularMarketCloseMinutes(parts: MarketClockParts): number | undefined {
   if (!["Mon", "Tue", "Wed", "Thu", "Fri"].includes(parts.weekday)) return undefined;
   const key = dateKey(parts.year, parts.month, parts.day);
   if (marketHolidays(parts.year).has(key)) return undefined;
   return earlyCloseDays(parts.year).has(key)
-    ? EARLY_MARKET_CLOSE_MINUTES
+    ? EARLY_REGULAR_MARKET_CLOSE_MINUTES
     : REGULAR_MARKET_CLOSE_MINUTES;
+}
+
+function extendedMarketCloseMinutes(parts: MarketClockParts): number | undefined {
+  const regularClose = regularMarketCloseMinutes(parts);
+  if (!regularClose) return undefined;
+  return regularClose === EARLY_REGULAR_MARKET_CLOSE_MINUTES
+    ? EARLY_EXTENDED_MARKET_CLOSE_MINUTES
+    : EXTENDED_MARKET_CLOSE_MINUTES;
 }
 
 export function regularMarketSessionOpen(at = new Date()): boolean {
   const parts = marketClockParts(at);
   if (!parts) return false;
-  const close = marketCloseMinutes(parts);
+  const close = regularMarketCloseMinutes(parts);
   if (!close) return false;
   const minutes = parts.hour * 60 + parts.minute;
-  return minutes >= MARKET_OPEN_MINUTES && minutes < close;
+  return minutes >= REGULAR_MARKET_OPEN_MINUTES && minutes < close;
+}
+
+export function arenaTradingSession(at = new Date()): ArenaTradingSession {
+  const parts = marketClockParts(at);
+  if (!parts) return "all_day_hours";
+  const regularClose = regularMarketCloseMinutes(parts);
+  const extendedClose = extendedMarketCloseMinutes(parts);
+  if (!regularClose || !extendedClose) return "all_day_hours";
+  const minutes = parts.hour * 60 + parts.minute;
+  if (
+    minutes >= REGULAR_MARKET_OPEN_MINUTES
+    && minutes < regularClose
+  ) {
+    return "regular_hours";
+  }
+  if (
+    minutes >= EXTENDED_MARKET_OPEN_MINUTES
+    && minutes < extendedClose
+  ) {
+    return "extended_hours";
+  }
+  return "all_day_hours";
+}
+
+export function arenaTradingSessionOpen(): boolean {
+  return true;
 }
 
 export function nextDecisionCycleAt(after = new Date()): Date {
-  const tickMs = SCHEDULER_TICK_MINUTES * 60 * 1000;
-  const firstCandidate = Math.floor(after.getTime() / tickMs) * tickMs + tickMs;
-  const maximumCandidates = (
-    MAX_SCHEDULE_LOOKAHEAD_DAYS * 24 * 60
-  ) / SCHEDULER_TICK_MINUTES;
-
-  for (let index = 0; index <= maximumCandidates; index += 1) {
-    const candidate = new Date(firstCandidate + index * tickMs);
-    const parts = marketClockParts(candidate);
-    if (!parts) continue;
-    const close = marketCloseMinutes(parts);
-    if (!close) continue;
-    const localMinutes = parts.hour * 60 + parts.minute;
-    const minutesFromFirstCycle = localMinutes
-      - (MARKET_OPEN_MINUTES + FIRST_DECISION_OFFSET_MINUTES);
-    if (
-      localMinutes < close
-      && minutesFromFirstCycle >= 0
-      && minutesFromFirstCycle % DECISION_CYCLE_MINUTES === 0
-    ) {
-      return candidate;
-    }
+  const hourMs = DECISION_CYCLE_MINUTES * 60 * 1000;
+  const candidate = new Date(
+    Math.floor(after.getTime() / hourMs) * hourMs
+    + DECISION_MINUTE * 60 * 1000,
+  );
+  if (candidate.getTime() <= after.getTime()) {
+    candidate.setTime(candidate.getTime() + hourMs);
   }
-  throw new Error("could not find the next regular U.S. market decision cycle");
+  return candidate;
 }
 
 export function scheduledCycleIsRetry(

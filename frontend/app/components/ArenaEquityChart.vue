@@ -270,8 +270,8 @@ function miniZeroY(): number {
   <div v-if="chart" class="arena-chart">
     <div class="chart-toolbar">
       <div>
-        <strong>Isolated portfolio comparison</strong>
-        <span>Shared return scale, aligned by broker snapshot time</span>
+        <strong>Portfolio comparison</strong>
+        <span>All returns share one scale and one Robinhood timeline</span>
       </div>
       <div class="chart-series-controls" role="group" aria-label="Portfolio shown on chart">
         <button

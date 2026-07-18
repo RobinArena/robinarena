@@ -239,19 +239,6 @@ a {
   font-size: 1rem;
 }
 
-.nav-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  color: var(--color-accent);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.nav-state svg {
-  font-size: 1rem;
-}
-
 .theme-toggle {
   display: inline-grid;
   width: 2.75rem;
@@ -2433,10 +2420,6 @@ a {
 @media (max-width: 40rem) {
   .page-shell {
     padding-top: 1.5rem;
-  }
-
-  .nav-state {
-    display: none;
   }
 
   .header-tools {

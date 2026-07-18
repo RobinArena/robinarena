@@ -35,7 +35,7 @@ const emit = defineEmits<{
           <span>Executed {{ decision.executed_notional > 0 ? formatCurrency(decision.executed_notional) : "none" }}</span>
         </div>
         <button class="decision-open" type="button" @click="emit('inspect', decision.agent_id)">
-          Open agent session
+          Inspect decision history
           <Icon name="ph:arrow-up-right" aria-hidden="true" />
         </button>
       </div>

@@ -13,6 +13,31 @@ coverage
 .env
 .env.*
 !.env.example
+.npmrc
+
+# Local credentials and signing material
+*.key
+*.pem
+*.p12
+*.pfx
+*.ppk
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+service-account*.json
+*-credentials.json
+
+# Local state and editor metadata
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.log
+.DS_Store
+.idea
+.vscode
+*.code-workspace
 
 npm-debug.log*
 pnpm-debug.log*

@@ -435,6 +435,8 @@ try {
   assert.equal(arena.positions.length, 4, "first cycle reconciled positions");
   assert.equal(arena.orders.every((order) => order.status === "filled" && order.broker_order_id), true);
   assert.equal(arena.orders.every((order) => order.reconciled_at), true);
+  assert.equal(arena.positions.every((position) => position.broker_order_id), true);
+  assert.equal(arena.trades.every((trade) => trade.broker_order_id), true);
   assert.equal(arena.positions.every((position) => position.average_entry_price === prices[position.symbol]), true);
   assert.equal(arena.market.every((quote) => quote.source === "robinhood_mcp"), true);
   assert.equal(arena.decisions.every((decision) => decision.source === "openrouter"), true);

@@ -469,19 +469,24 @@ async function applyBuyFill(
         `;
       } else {
         await tx.exec`
-          INSERT INTO arena_trades (agent_id, position_id, symbol, quantity, entry_price, status)
-          VALUES (${order.agent_id}, ${existing.id}, ${order.symbol}, ${deltaQuantity}, ${deltaPrice}, 'open')
+          INSERT INTO arena_trades (
+            agent_id, position_id, source_order_id, symbol, quantity, entry_price, status
+          ) VALUES (
+            ${order.agent_id}, ${existing.id}, ${order.id}, ${order.symbol},
+            ${deltaQuantity}, ${deltaPrice}, 'open'
+          )
         `;
       }
       positionId = existing.id;
     } else {
       const created = await tx.queryRow<{ id: string }>`
         INSERT INTO arena_positions (
-          agent_id, symbol, quantity, average_entry_price, current_price,
-          market_value, unrealized_pnl, stop_loss, take_profit
+          agent_id, source_order_id, symbol, quantity, average_entry_price,
+          current_price, market_value, unrealized_pnl, stop_loss, take_profit
         ) VALUES (
-          ${order.agent_id}, ${order.symbol}, ${deltaQuantity}, ${deltaPrice}, ${mark},
-          ${deltaQuantity * mark}, ${deltaQuantity * (mark - deltaPrice)},
+          ${order.agent_id}, ${order.id}, ${order.symbol}, ${deltaQuantity},
+          ${deltaPrice}, ${mark}, ${deltaQuantity * mark},
+          ${deltaQuantity * (mark - deltaPrice)},
           ${deltaPrice * (1 - HARD_STOP_PCT / 100)},
           ${deltaPrice * (1 + TAKE_PROFIT_PCT / 100)}
         ) RETURNING id
@@ -489,8 +494,12 @@ async function applyBuyFill(
       if (!created) throw new Error("broker fill could not create a local position");
       positionId = created.id;
       await tx.exec`
-        INSERT INTO arena_trades (agent_id, position_id, symbol, quantity, entry_price, status)
-        VALUES (${order.agent_id}, ${positionId}, ${order.symbol}, ${deltaQuantity}, ${deltaPrice}, 'open')
+        INSERT INTO arena_trades (
+          agent_id, position_id, source_order_id, symbol, quantity, entry_price, status
+        ) VALUES (
+          ${order.agent_id}, ${positionId}, ${order.id}, ${order.symbol},
+          ${deltaQuantity}, ${deltaPrice}, 'open'
+        )
       `;
     }
     const debited = await tx.queryRow<{ id: string }>`
@@ -578,11 +587,12 @@ async function applySellFill(
       } else {
         await tx.exec`
           INSERT INTO arena_trades (
-            agent_id, position_id, symbol, quantity, entry_price, exit_price,
-            realized_pnl, return_pct, status, closed_at, exit_reason
+            agent_id, position_id, source_order_id, symbol, quantity, entry_price,
+            exit_price, realized_pnl, return_pct, status, closed_at, exit_reason
           ) VALUES (
-            ${order.agent_id}, ${position.id}, ${order.symbol}, ${soldQuantity}, ${entry},
-            ${deltaPrice}, ${realized}, ${returnPct}, 'closed', now(), 'Robinhood broker fill'
+            ${order.agent_id}, ${position.id}, ${order.id}, ${order.symbol},
+            ${soldQuantity}, ${entry}, ${deltaPrice}, ${realized}, ${returnPct},
+            'closed', now(), 'Robinhood broker fill'
           )
         `;
       }
@@ -598,11 +608,12 @@ async function applySellFill(
       }
       await tx.exec`
         INSERT INTO arena_trades (
-          agent_id, position_id, symbol, quantity, entry_price, exit_price,
-          realized_pnl, return_pct, status, closed_at, exit_reason
+          agent_id, position_id, source_order_id, symbol, quantity, entry_price,
+          exit_price, realized_pnl, return_pct, status, closed_at, exit_reason
         ) VALUES (
-          ${order.agent_id}, ${position.id}, ${order.symbol}, ${soldQuantity}, ${entry},
-          ${deltaPrice}, ${realized}, ${returnPct}, 'closed', now(), 'Robinhood partial fill'
+          ${order.agent_id}, ${position.id}, ${order.id}, ${order.symbol},
+          ${soldQuantity}, ${entry}, ${deltaPrice}, ${realized}, ${returnPct},
+          'closed', now(), 'Robinhood partial fill'
         )
       `;
     }
@@ -638,12 +649,18 @@ async function applySellFill(
 }
 
 async function reconcileOrder(local: LocalOrderRow, remote: RobinhoodOrderSnapshot): Promise<void> {
+  if (remote.symbol !== local.symbol || remote.side !== local.side) {
+    throw new Error(
+      `Robinhood order ${remote.broker_order_id} does not match the local ${local.side} ${local.symbol} request`,
+    );
+  }
   const filled = Math.max(0, remote.filled_quantity);
   const accountedQuantity = numeric(local.accounted_quantity);
   const accountedNotional = numeric(local.accounted_notional);
   await db.exec`
     UPDATE arena_orders SET status = ${remote.status}, filled_quantity = ${filled},
-      average_fill_price = ${remote.average_fill_price ?? null}, broker_payload = ${JSON.stringify(remote)}::jsonb,
+      average_fill_price = coalesce(${remote.average_fill_price ?? null}, average_fill_price),
+      broker_payload = ${JSON.stringify(remote)}::jsonb,
       error_message = NULL
     WHERE id = ${local.id}
   `;

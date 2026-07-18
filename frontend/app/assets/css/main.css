@@ -175,8 +175,12 @@ a {
 
 .brand-copy strong {
   font-size: 1rem;
-  font-weight: 650;
-  letter-spacing: -0.035em;
+  font-weight: 520;
+  letter-spacing: -0.045em;
+}
+
+.brand-copy strong span:last-child {
+  font-weight: 760;
 }
 
 .site-nav {
@@ -291,10 +295,11 @@ a {
 .hero-copy h1 {
   max-width: 57rem;
   margin: 0;
-  font-size: clamp(3.75rem, 7.1vw, 7rem);
+  font-size: clamp(3.5rem, 5.8vw, 5.8rem);
   font-weight: 500;
   letter-spacing: -0.055em;
-  line-height: 0.88;
+  line-height: 0.92;
+  text-wrap: balance;
 }
 
 .hero-copy > p:not(.round-notice) {
@@ -2440,8 +2445,8 @@ a {
   }
 
   .hero-copy h1 {
-    font-size: clamp(3.25rem, 15vw, 4.8rem);
-    line-height: 0.92;
+    font-size: clamp(2.7rem, 12.5vw, 3.5rem);
+    line-height: 0.94;
   }
 
   .hero-actions,

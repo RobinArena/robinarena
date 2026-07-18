@@ -21,7 +21,7 @@ const themeToggleLabel = computed(() => (
           <RobinArenaMark />
         </span>
         <span class="brand-copy">
-          <strong>RobinArena</strong>
+          <strong><span>Robin</span><span>Arena</span></strong>
         </span>
       </NuxtLink>
 

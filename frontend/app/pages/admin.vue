@@ -27,9 +27,19 @@ const nextEligibleCycle = computed(() => {
   const current = arena.value?.arena;
   if (!current?.live_armed) return "After arming";
   if (!current.automation_enabled) return "Manual only";
-  return current.market_session_open
-    ? formatRelativeTime(current.next_cycle_at)
-    : formatDateTime(current.next_cycle_at);
+  return formatRelativeTime(current.next_cycle_at);
+});
+const tradingSessionLabel = computed(() => {
+  switch (arena.value?.arena.trading_session) {
+    case "regular_hours":
+      return "Regular";
+    case "extended_hours":
+      return "Extended";
+    case "all_day_hours":
+      return "All-day";
+    default:
+      return "Pending";
+  }
 });
 const readiness = computed(() => {
   if (!arena.value) return [];
@@ -259,7 +269,7 @@ onBeforeUnmount(pause);
       <header class="admin-header">
         <div>
           <h1>Operate RobinArena.</h1>
-          <p>Robinhood funds the four ledgers. Automatic decisions use fixed hourly slots during the regular U.S. market session.</p>
+          <p>Robinhood funds the four ledgers. Automatic decisions run hourly around the clock.</p>
         </div>
         <div class="admin-session">
           <span :class="{ 'is-live': arena.arena.live_armed, 'is-halted': arena.arena.halted }">
@@ -298,8 +308,8 @@ onBeforeUnmount(pause);
         <dl>
           <div><dt>Current cycle</dt><dd>#{{ arena.arena.cycle_number }}</dd></div>
           <div><dt>Round closes</dt><dd>{{ formatRelativeTime(arena.arena.round_ends_at) }}</dd></div>
-          <div><dt>Next eligible cycle</dt><dd>{{ nextEligibleCycle }}</dd></div>
-          <div><dt>US market</dt><dd>{{ arena.arena.market_session_open ? "Open" : "Closed" }}</dd></div>
+          <div><dt>Next cycle</dt><dd>{{ nextEligibleCycle }}</dd></div>
+          <div><dt>Trading session</dt><dd>{{ tradingSessionLabel }}</dd></div>
         </dl>
       </section>
 
@@ -366,7 +376,7 @@ onBeforeUnmount(pause);
             <div v-if="!arena.arena.live_armed" class="confirmation-control">
               <label class="automation-option">
                 <input v-model="automationEnabled" type="checkbox">
-                <span><strong>Run hourly during market hours</strong><small>Fixed slots begin at 9:35 AM ET. Manual cycles leave the automatic schedule unchanged.</small></span>
+                <span><strong>Run hourly around the clock</strong><small>Fixed slots run at :35 every hour. Manual cycles leave the automatic schedule unchanged.</small></span>
               </label>
               <label>
                 <span>Type to arm live trading</span>

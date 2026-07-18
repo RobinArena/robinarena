@@ -299,7 +299,7 @@ function miniZeroY(): number {
     <div class="chart-toolbar">
       <div>
         <strong>Portfolio comparison</strong>
-        <span>Market-hours marks share one scale; closed sessions appear as gaps</span>
+        <span>Broker-reconciled changes share one scale; unchanged periods appear as gaps</span>
       </div>
       <div class="chart-series-controls" role="group" aria-label="Portfolio shown on chart">
         <button

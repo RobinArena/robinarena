@@ -49,12 +49,13 @@ export interface OpenRouterDecisionInput {
   };
   risk: {
     long_only: true;
-    risk_per_trade_pct: number;
     max_position_pct: number;
-    min_confidence: number;
-    max_daily_loss: number;
-    hard_stop_pct: number;
-    take_profit_pct: number;
+  };
+  execution: {
+    market_hours: "regular_hours" | "extended_hours" | "all_day_hours";
+    order_type: "market" | "limit";
+    whole_shares_only: boolean;
+    max_buy_notional: number;
   };
   market: OpenRouterMarketInput[];
 }
@@ -131,7 +132,6 @@ function completionText(content: unknown): string | undefined {
 function parseDecision(
   content: string,
   symbols: Set<string>,
-  openingPositionRequired: boolean,
 ): OpenRouterModelDecision {
   let parsed: unknown;
   try {
@@ -155,9 +155,6 @@ function parseDecision(
   const allocation = optionalNumber(value.allocation_pct);
   if (allocation === undefined || allocation < 0 || allocation > 40) {
     throw new Error("OpenRouter returned invalid allocation");
-  }
-  if (openingPositionRequired && (action !== "buy" || allocation < 20)) {
-    throw new Error("OpenRouter did not satisfy the required opening allocation");
   }
   const rationale = typeof value.rationale === "string" ? value.rationale.trim() : "";
   if (!rationale || rationale.length > 320) throw new Error("OpenRouter returned invalid rationale");
@@ -204,19 +201,20 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
   const startedAt = Date.now();
   const appUrl = process.env.OPENROUTER_APP_URL?.trim()
     || (process.env.NODE_ENV === "production" ? "https://robinarena.fun" : undefined);
-  const openingPositionRequired = input.portfolio.positions.length === 0
-    && input.portfolio.cash_balance >= 1;
+  const outsideRegularHours = input.execution.market_hours !== "regular_hours";
 
   const system = [
     "You are a competitor in RobinArena, a week-long, long-only live trading arena using real money in a dedicated Robinhood Agentic account.",
     "Choose one action from buy, sell, or hold using only the supplied snapshot.",
-    openingPositionRequired
-      ? "Opening participation is required because this portfolio has no position: buy the strongest relative symbol and allocate 20 to 40 percent."
-      : "With an open position, buy, sell, or hold according to your strategy and the supplied portfolio state.",
+    "You control whether this portfolio participates. Buying, selling, and holding are valid when supported by your strategy and the supplied portfolio state.",
     "A buy must select a shared-market symbol without an existing position.",
     "A sell must select a symbol currently held by this portfolio.",
+    outsideRegularHours
+      ? `This cycle uses Robinhood ${input.execution.market_hours}. Orders use whole-share limits: buy only when at least one whole share fits execution.max_buy_notional, and sell only a position containing at least one whole share.`
+      : "This is a regular-hours cycle using fractional-capable market orders.",
     "Set allocation_pct from 0 to 40 for buys and 0 for sells or holds.",
-    "Do not invent news, prices, indicators, or history. The risk engine may reduce or reject the request before a real order is submitted.",
+    "The account layer caps buys to execution.max_buy_notional, prevents shorts and duplicate pending orders, and sends valid requests to Robinhood for review.",
+    "Do not invent news, prices, indicators, or history.",
     "Keep the rationale specific and under 280 characters.",
   ].join(" ");
 
@@ -226,7 +224,7 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
     properties: {
       action: {
         type: "string",
-        enum: openingPositionRequired ? ["buy"] : ["buy", "sell", "hold"],
+        enum: ["buy", "sell", "hold"],
       },
       symbol: { type: "string", enum: symbols },
       confidence: {
@@ -235,9 +233,7 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
       },
       allocation_pct: {
         type: "number",
-        description: openingPositionRequired
-          ? "A required opening allocation from 20 through 40 percent."
-          : "A value from 0 through 40 for buys, or 0 for sells and holds.",
+        description: "A value from 0 through 40 for buys, or 0 for sells and holds.",
       },
       rationale: {
         type: "string",
@@ -294,7 +290,7 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
     if (!content) throw new OpenRouterRequestError("OpenRouter returned no decision content", latencyMs);
     let decision: OpenRouterModelDecision;
     try {
-      decision = parseDecision(content, new Set(symbols), openingPositionRequired);
+      decision = parseDecision(content, new Set(symbols));
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "OpenRouter decision validation failed";
       throw new OpenRouterRequestError(message, latencyMs);

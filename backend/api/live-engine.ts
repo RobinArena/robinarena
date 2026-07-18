@@ -1,10 +1,11 @@
 import { APIError } from "encore.dev/api";
 import {
   COMPETITION_ROUND_DAYS,
+  arenaTradingSession,
   nextDecisionCycleAt,
-  regularMarketSessionOpen,
   SCHEDULED_CYCLE_GRACE_MINUTES,
   scheduledCycleIsRetry,
+  type ArenaTradingSession,
 } from "./arena-time";
 import { db } from "./db";
 import {
@@ -153,10 +154,19 @@ function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function liveMarketSessionOpen(at = new Date()): boolean {
-  const testOverride = process.env.NODE_ENV !== "production"
-    && process.env.ARENA_TEST_MARKET_OPEN === "1";
-  return testOverride || regularMarketSessionOpen(at);
+function liveTradingSession(at = new Date()): ArenaTradingSession {
+  if (process.env.NODE_ENV !== "production") {
+    const override = process.env.ARENA_TEST_TRADING_SESSION;
+    if (
+      override === "regular_hours"
+      || override === "extended_hours"
+      || override === "all_day_hours"
+    ) {
+      return override;
+    }
+    if (process.env.ARENA_TEST_MARKET_OPEN === "1") return "regular_hours";
+  }
+  return arenaTradingSession(at);
 }
 
 async function markSchedulerSeen(): Promise<void> {
@@ -982,7 +992,13 @@ function decisionInput(
   agent: AgentRow,
   market: MarketQuote[],
   positions: ArenaPosition[],
+  tradingSession: ArenaTradingSession,
 ) {
+  const initial = numeric(agent.initial_balance);
+  const maxBuyNotional = rounded(Math.min(
+    numeric(agent.cash_balance),
+    initial * (numeric(agent.max_position_pct) / 100),
+  ), 2);
   return {
     round_number: roundNumber,
     cycle_number: cycleNumber,
@@ -1010,12 +1026,13 @@ function decisionInput(
     },
     risk: {
       long_only: true as const,
-      risk_per_trade_pct: numeric(agent.risk_per_trade_pct),
       max_position_pct: numeric(agent.max_position_pct),
-      min_confidence: numeric(agent.min_confidence),
-      max_daily_loss: numeric(agent.max_daily_loss),
-      hard_stop_pct: HARD_STOP_PCT,
-      take_profit_pct: TAKE_PROFIT_PCT,
+    },
+    execution: {
+      market_hours: tradingSession,
+      order_type: tradingSession === "regular_hours" ? "market" as const : "limit" as const,
+      whole_shares_only: tradingSession !== "regular_hours",
+      max_buy_notional: maxBuyNotional,
     },
     market: market.map((quote) => ({
       symbol: quote.symbol,
@@ -1036,13 +1053,21 @@ async function requestModelDecisions(
   agents: AgentRow[],
   market: MarketQuote[],
   positions: ArenaPosition[],
+  tradingSession: ArenaTradingSession,
 ): Promise<ProviderOutcome[]> {
   return Promise.all(agents.map(async (agent): Promise<ProviderOutcome> => {
     let lastError = new OpenRouterRequestError("Model decision failed", 0);
     for (let attempt = 1; attempt <= MODEL_DECISION_ATTEMPTS; attempt += 1) {
       try {
         const result = await requestOpenRouterDecision(
-          decisionInput(roundNumber, cycleNumber, agent, market, positions),
+          decisionInput(
+            roundNumber,
+            cycleNumber,
+            agent,
+            market,
+            positions,
+            tradingSession,
+          ),
         );
         return { ok: true, agent, result };
       } catch (cause) {
@@ -1071,6 +1096,8 @@ async function createBrokerOrder(input: {
   side: "buy" | "sell";
   requestedAmount: number;
   requestedQuantity: number;
+  marketHours: ArenaTradingSession;
+  limitPrice?: number;
   positionId?: string;
   emergency?: boolean;
 }): Promise<{ id: string; brokerOrderId?: string; status: string }> {
@@ -1089,7 +1116,10 @@ async function createBrokerOrder(input: {
     const result = await client.placeOrder({
       symbol: input.symbol,
       side: input.side,
-      ...(input.side === "buy"
+      marketHours: input.marketHours,
+      limitPrice: input.limitPrice,
+      refId: local.id,
+      ...(input.marketHours === "regular_hours" && input.side === "buy"
         ? { amount: input.requestedAmount }
         : { quantity: input.requestedQuantity }),
     });
@@ -1131,9 +1161,14 @@ async function executeBuy(
   decision: OpenRouterModelDecision,
   result: OpenRouterDecisionResult,
   roundNumber: number,
+  tradingSession: ArenaTradingSession,
 ): Promise<ModelRoundResult> {
-  const [quote, existing, pending, daily, totalExposure, state] = await Promise.all([
-    db.queryRow<{ price: string | number }>`SELECT price FROM arena_market WHERE symbol = ${decision.symbol}`,
+  const [quote, existing, pending, totalExposure, state] = await Promise.all([
+    db.queryRow<{
+      price: string | number;
+      bid: string | number | null;
+      ask: string | number | null;
+    }>`SELECT price, bid, ask FROM arena_market WHERE symbol = ${decision.symbol}`,
     db.queryRow<{ id: string }>`
       SELECT id FROM arena_positions
       WHERE agent_id = ${agent.id} AND symbol = ${decision.symbol} AND status = 'open'
@@ -1143,11 +1178,6 @@ async function executeBuy(
         coalesce(sum(CASE WHEN side = 'buy' THEN requested_amount ELSE 0 END), 0) AS amount,
         count(*) AS order_count
       FROM arena_orders WHERE agent_id = ${agent.id} AND reconciled_at IS NULL
-    `,
-    db.queryRow<{ pnl: string | number }>`
-      SELECT coalesce(sum(realized_pnl), 0) AS pnl FROM arena_trades
-      WHERE agent_id = ${agent.id} AND status = 'closed'
-        AND closed_at >= date_trunc('day', now())
     `,
     db.queryRow<{ exposure: string | number; pending: string | number }>`
       SELECT
@@ -1192,8 +1222,6 @@ async function executeBuy(
   const pendingAmount = numeric(pending?.amount);
   const cashAvailable = Math.max(0, numeric(agent.cash_balance) - pendingAmount);
   const requestedNotional = equity * (decision.allocation_pct / 100);
-  const maxRisk = initial * (numeric(agent.risk_per_trade_pct) / 100);
-  const maxNotionalFromRisk = maxRisk / (HARD_STOP_PCT / 100);
   const positionCap = initial * (numeric(agent.max_position_pct) / 100);
   const globalRemaining = Math.max(
     0,
@@ -1205,34 +1233,44 @@ async function executeBuy(
   );
   const approved = rounded(Math.min(
     requestedNotional,
-    maxNotionalFromRisk,
     positionCap,
     cashAvailable,
     globalRemaining,
     brokerRemaining,
   ), 2);
-  if (decision.confidence < numeric(agent.min_confidence)) {
-    return rejection("Confidence is below the model threshold.", requestedNotional);
-  }
-  if (numeric(daily?.pnl) <= -numeric(agent.max_daily_loss)) {
-    return rejection("The model ledger reached its daily loss limit.", requestedNotional);
-  }
   if (approved < MIN_ORDER_AMOUNT) {
-    return rejection("The available live risk budget is below Robinhood’s minimum arena order.", requestedNotional);
+    return rejection("The model’s available cash allocation is below Robinhood’s minimum arena order.", requestedNotional);
   }
-  const expectedQuantity = approved / numeric(quote.price);
+  let orderAmount = approved;
+  let orderQuantity = approved / numeric(quote.price);
+  let limitPrice: number | undefined;
+  if (tradingSession !== "regular_hours") {
+    limitPrice = rounded(numeric(quote.ask) || numeric(quote.price), 4);
+    orderQuantity = Math.floor((approved + 0.0001) / limitPrice);
+    if (orderQuantity < 1) {
+      return rejection(
+        `Robinhood requires one whole share outside regular hours, and none fits this model’s $${approved.toFixed(2)} allocation.`,
+        requestedNotional,
+      );
+    }
+    orderAmount = rounded(orderQuantity * limitPrice, 4);
+  }
   try {
     const order = await createBrokerOrder({
       agentId: agent.id,
       symbol: decision.symbol,
       side: "buy",
-      requestedAmount: approved,
-      requestedQuantity: expectedQuantity,
+      requestedAmount: orderAmount,
+      requestedQuantity: orderQuantity,
+      marketHours: tradingSession,
+      limitPrice,
     });
-    const capped = approved + 0.01 < requestedNotional;
-    const riskNote = capped
-      ? `A $${approved.toFixed(2)} live Robinhood order was submitted after the risk cap reduced the request.`
-      : `A $${approved.toFixed(2)} live Robinhood order was submitted for broker execution.`;
+    const capped = orderAmount + 0.01 < requestedNotional;
+    const riskNote = tradingSession !== "regular_hours"
+      ? `${orderQuantity} ${decision.symbol} share${orderQuantity === 1 ? "" : "s"} were submitted as a $${limitPrice?.toFixed(4)} limit order for Robinhood’s ${tradingSession}.`
+      : capped
+        ? `A $${orderAmount.toFixed(2)} live Robinhood order was submitted after the risk cap reduced the request.`
+        : `A $${orderAmount.toFixed(2)} live Robinhood order was submitted for broker execution.`;
     await insertDecision({
       roundNumber,
       agentId: agent.id,
@@ -1282,6 +1320,7 @@ async function executeSell(
   decision: OpenRouterModelDecision,
   result: OpenRouterDecisionResult,
   roundNumber: number,
+  tradingSession: ArenaTradingSession,
 ): Promise<ModelRoundResult> {
   const position = await db.queryRow<ExecutionPositionRow>`
     SELECT id, agent_id, symbol, quantity, average_entry_price, current_price,
@@ -1323,18 +1362,51 @@ async function executeSell(
     });
     return { agent_id: agent.id, model: result.model, status: "skipped", action: "skip", message };
   }
+  const quote = await db.queryRow<{
+    price: string | number;
+    bid: string | number | null;
+  }>`SELECT price, bid FROM arena_market WHERE symbol = ${decision.symbol}`;
+  let quantity = numeric(position.quantity);
+  let limitPrice: number | undefined;
+  if (tradingSession !== "regular_hours") {
+    quantity = Math.floor(quantity + QUANTITY_EPSILON);
+    if (quantity < 1) {
+      const message = "Robinhood accepts only whole-share limit orders outside regular hours. This fractional position remains open.";
+      await insertDecision({
+        roundNumber,
+        agentId: agent.id,
+        symbol: decision.symbol,
+        action: "skip",
+        confidence: decision.confidence,
+        rationale: decision.rationale,
+        riskNote: message,
+        audit,
+      });
+      return {
+        agent_id: agent.id,
+        model: result.model,
+        status: "skipped",
+        action: "skip",
+        message,
+      };
+    }
+    limitPrice = rounded(numeric(quote?.bid) || numeric(quote?.price), 4);
+  }
   try {
-    const quantity = numeric(position.quantity);
     const order = await createBrokerOrder({
       agentId: agent.id,
       symbol: decision.symbol,
       side: "sell",
       requestedAmount: 0,
       requestedQuantity: quantity,
+      marketHours: tradingSession,
+      limitPrice,
       positionId: position.id,
     });
     const expected = quantity * numeric(position.current_price);
-    const message = `${rounded(quantity, 6)} ${decision.symbol} shares were submitted to Robinhood for sale.`;
+    const message = tradingSession !== "regular_hours"
+      ? `${quantity} ${decision.symbol} share${quantity === 1 ? "" : "s"} were submitted as a $${limitPrice?.toFixed(4)} sell limit for Robinhood’s ${tradingSession}.`
+      : `${rounded(quantity, 6)} ${decision.symbol} shares were submitted to Robinhood for sale.`;
     await insertDecision({
       roundNumber,
       agentId: agent.id,
@@ -1381,10 +1453,15 @@ async function executeSell(
 async function executeModelDecision(
   outcome: ProviderSuccess,
   roundNumber: number,
+  tradingSession: ArenaTradingSession,
 ): Promise<ModelRoundResult> {
   const { agent, result } = outcome;
-  if (result.decision.action === "buy") return executeBuy(agent, result.decision, result, roundNumber);
-  if (result.decision.action === "sell") return executeSell(agent, result.decision, result, roundNumber);
+  if (result.decision.action === "buy") {
+    return executeBuy(agent, result.decision, result, roundNumber, tradingSession);
+  }
+  if (result.decision.action === "sell") {
+    return executeSell(agent, result.decision, result, roundNumber, tradingSession);
+  }
   await insertDecision({
     roundNumber,
     agentId: agent.id,
@@ -1392,7 +1469,7 @@ async function executeModelDecision(
     action: "hold",
     confidence: result.decision.confidence,
     rationale: result.decision.rationale,
-    riskNote: "No Robinhood order was sent. Existing broker stops remain enforced by the arena scheduler.",
+    riskNote: "No Robinhood order was sent. The model chose to leave its portfolio unchanged.",
     audit: providerAudit(result),
   });
   return {
@@ -1435,67 +1512,12 @@ async function recordProviderFailure(
   };
 }
 
-async function enforceHardExits(roundNumber: number): Promise<Set<string>> {
-  const exits = await db.queryAll<ExecutionPositionRow>`
-    SELECT p.id, p.agent_id, p.symbol, p.quantity, p.average_entry_price,
-      p.current_price, p.stop_loss, p.take_profit
-    FROM arena_positions p
-    WHERE p.status = 'open'
-      AND (p.current_price <= p.stop_loss OR p.current_price >= p.take_profit)
-      AND NOT EXISTS (
-        SELECT 1 FROM arena_orders o
-        WHERE o.agent_id = p.agent_id AND o.reconciled_at IS NULL
-      )
-  `;
-  const exited = new Set<string>();
-  for (const position of exits) {
-    const stopHit = numeric(position.current_price) <= numeric(position.stop_loss);
-    const reason = stopHit ? "hard stop" : "take profit";
-    try {
-      const order = await createBrokerOrder({
-        agentId: position.agent_id,
-        symbol: position.symbol,
-        side: "sell",
-        requestedAmount: 0,
-        requestedQuantity: numeric(position.quantity),
-        positionId: position.id,
-      });
-      await insertDecision({
-        roundNumber,
-        agentId: position.agent_id,
-        symbol: position.symbol,
-        action: "sell",
-        confidence: 1,
-        rationale: `${position.symbol} reached its ${reason}; the risk engine submitted an exit before model inference.`,
-        proposedNotional: numeric(position.quantity) * numeric(position.current_price),
-        approved: true,
-        riskNote: `The live ${reason} exit was submitted to Robinhood.`,
-        orderId: order.id,
-        audit: { source: "risk_engine", requestedAction: "sell", requestedAllocationPct: 0 },
-      });
-      exited.add(position.agent_id);
-    } catch (cause) {
-      await db.exec`
-        UPDATE arena_state SET live_armed = false, automation_enabled = false,
-          halted = true, status = 'paused', halt_reason = ${`Risk exit failed: ${errorText(cause)}`},
-          updated_at = now() WHERE id = 1
-      `;
-      throw cause;
-    }
-  }
-  return exited;
-}
-
 export async function runLiveRound(options?: {
   brokerAlreadySynced?: boolean;
   nextCycleAt?: Date;
 }): Promise<RunRoundResponse> {
   if (!openRouterConfigured()) throw APIError.failedPrecondition("OpenRouterAPIKey is not configured");
-  if (!liveMarketSessionOpen()) {
-    throw APIError.failedPrecondition(
-      "live decision cycles run only during the regular U.S. market session",
-    );
-  }
+  const tradingSession = liveTradingSession();
   await ensureWeeklyCompetition();
   const scheduledNextCycleAt = options?.nextCycleAt || null;
   const claimed = await db.queryRow<{ round_number: number; cycle_number: number }>`
@@ -1537,18 +1559,9 @@ export async function runLiveRound(options?: {
     if (!fallbackSymbol || market.length !== ARENA_UNIVERSE.length) {
       throw APIError.failedPrecondition("Robinhood did not return the full verified market universe");
     }
-    const exitedAgents = await enforceHardExits(claimed.round_number);
     const roundResults: ModelRoundResult[] = [];
     for (const agent of agents) {
-      if (exitedAgents.has(agent.id)) {
-        roundResults.push({
-          agent_id: agent.id,
-          model: agent.openrouter_model,
-          status: "skipped",
-          action: "sell",
-          message: "The risk engine submitted a live exit before model inference.",
-        });
-      } else if (agent.status !== "active") {
+      if (agent.status !== "active") {
         roundResults.push({
           agent_id: agent.id,
           model: agent.openrouter_model,
@@ -1557,17 +1570,18 @@ export async function runLiveRound(options?: {
         });
       }
     }
-    const eligible = agents.filter((agent) => agent.status === "active" && !exitedAgents.has(agent.id));
+    const eligible = agents.filter((agent) => agent.status === "active");
     const outcomes = await requestModelDecisions(
       claimed.round_number,
       claimed.cycle_number,
       eligible,
       market,
       positions,
+      tradingSession,
     );
     for (const outcome of outcomes) {
       roundResults.push(outcome.ok
-        ? await executeModelDecision(outcome, claimed.round_number)
+        ? await executeModelDecision(outcome, claimed.round_number, tradingSession)
         : await recordProviderFailure(outcome, claimed.round_number, fallbackSymbol));
     }
     try {
@@ -1616,7 +1630,7 @@ export async function armLiveArena(automationEnabled: boolean): Promise<BrokerAc
     );
   }
   const scheduledAt = automationEnabled
-    ? (liveMarketSessionOpen() ? new Date() : nextDecisionCycleAt())
+    ? new Date()
     : null;
   await db.exec`
     UPDATE arena_state SET live_armed = true, automation_enabled = ${automationEnabled},
@@ -1679,6 +1693,7 @@ export async function flattenManagedPositions(): Promise<number> {
       side: "sell",
       requestedAmount: 0,
       requestedQuantity: numeric(position.quantity),
+      marketHours: "regular_hours",
       positionId: position.id,
       emergency: true,
     });
@@ -1752,17 +1767,13 @@ export async function scheduledLiveRound(): Promise<void> {
     if (!brokerSynced) {
       throw new Error("Robinhood did not provide a verified broker snapshot");
     }
-    if (!liveMarketSessionOpen()) {
-      const nextCycleAt = nextDecisionCycleAt();
-      const storedNextCycle = new Date(state.next_cycle_at).getTime();
-      if (Math.abs(storedNextCycle - nextCycleAt.getTime()) >= 60_000) {
-        await db.exec`
-          UPDATE arena_state SET next_cycle_at = ${nextCycleAt}, updated_at = now()
-          WHERE id = 1
-        `;
-      }
-      await markSchedulerSuccess();
-      return;
+    const nextFixedSlot = nextDecisionCycleAt();
+    if (new Date(state.next_cycle_at).getTime() > nextFixedSlot.getTime() + 60_000) {
+      await db.exec`
+        UPDATE arena_state SET next_cycle_at = now(), updated_at = now()
+        WHERE id = 1
+      `;
+      state = await getArenaState();
     }
     if (new Date(state.next_cycle_at).getTime() > Date.now()) {
       await markSchedulerSuccess();

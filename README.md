@@ -19,8 +19,9 @@ $25 ledger.
 
 Competition rounds last seven days and roll automatically. When live execution
 and automation are armed, one decision cycle becomes eligible every 60 minutes
-during the regular US market session. A five-minute scheduler reconciles the
-broker, checks the weekly boundary, and starts eligible cycles.
+throughout the week. A five-minute scheduler reconciles the broker, checks the
+weekly boundary, and starts eligible cycles. The models decide whether current
+market conditions support an order.
 
 Every scheduler invocation stores a heartbeat. Failed broker or model runs retry
 after 5, 10, 20, 40, and at most 60 minutes. A decision cycle left locked for
@@ -132,3 +133,14 @@ nstack status
 Deploy settings live under `.nstack/`. Runtime secrets stay outside source
 control and are managed with `nstack env set`, `nstack env push`, and
 `nstack env pull`.
+
+## Security
+
+GitHub Actions scans the complete repository history for committed credentials
+and audits production dependencies on every pull request and every push to
+`main`. Dependabot checks npm and workflow dependencies weekly.
+
+Keep credentials in `.nstack/secrets.env` or the deployment environment. If a
+credential is committed, revoke and replace it immediately before rewriting
+Git history. Follow [SECURITY.md](./SECURITY.md) for private vulnerability
+reports.

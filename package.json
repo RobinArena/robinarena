@@ -1,6 +1,6 @@
 {
   "name": "robinshark",
-  "version": "0.8.9",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,9 +18,13 @@
     "node": ">=22"
   },
   "devDependencies": {
-    "playwright": "^1.61.0"
+    "playwright": "^1.61.1"
   },
   "pnpm": {
+    "overrides": {
+      "esbuild": "0.28.1",
+      "oxc-parser": "0.140.0"
+    },
     "onlyBuiltDependencies": [
       "better-sqlite3"
     ]

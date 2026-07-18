@@ -9,10 +9,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "encore.dev": "^1.57.9"
+    "encore.dev": "^1.57.11"
   },
   "devDependencies": {
-    "@types/node": "^24.10.0",
+    "@types/node": "^24.13.3",
     "typescript": "~5.8.3"
   }
 }

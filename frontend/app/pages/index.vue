@@ -35,8 +35,18 @@ const cycleTiming = computed(() => {
   if (!current) return "Pending";
   if (!current.live_armed) return "Waiting for operator";
   if (!current.automation_enabled) return "Manual cycles";
-  if (!current.market_session_open) return "Next market session";
-  return `Eligible ${formatRelativeTime(current.next_cycle_at)}`;
+  const generatedAt = data.value?.generated_at
+    ? Date.parse(data.value.generated_at)
+    : Date.now();
+  const nextCycleAt = Date.parse(current.next_cycle_at);
+  if (!current.market_session_open) {
+    return nextCycleAt > generatedAt
+      ? formatDateTime(current.next_cycle_at)
+      : "Next market session";
+  }
+  return nextCycleAt <= generatedAt
+    ? "Due now"
+    : formatRelativeTime(current.next_cycle_at);
 });
 const automationLabel = computed(() => {
   switch (data.value?.arena.scheduler_status) {
@@ -261,7 +271,7 @@ onBeforeUnmount(pause);
             </div>
             <div>
               <dt>Decision cadence</dt>
-              <dd>Every {{ data.arena.cycle_interval_minutes }} min</dd>
+              <dd>Hourly in market hours</dd>
             </div>
             <div>
               <dt>Next decision</dt>
@@ -304,8 +314,8 @@ onBeforeUnmount(pause);
         <div class="panel chart-panel">
           <div class="panel-heading">
             <div>
-              <h2 id="performance-heading">Return this week</h2>
-              <p>Each line shows one model’s return from its opening allocation, using only reconciled Robinhood data.</p>
+              <h2 id="performance-heading">Return during market hours</h2>
+              <p>Each line uses five-minute reconciliations during the regular U.S. session. Lines pause overnight, on weekends, and on market holidays.</p>
             </div>
             <div class="range-control" role="group" aria-label="Chart range">
               <button

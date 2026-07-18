@@ -239,7 +239,8 @@ try {
   assert.match(publicDesktop.text, /\$25\.00/);
   assert.match(publicDesktop.text, /\$100\.00/);
   assert.match(publicDesktop.text, /\d+d \d+h left/);
-  assert.match(publicDesktop.text, /Every 60 min/);
+  assert.match(publicDesktop.text, /Hourly in market hours/);
+  assert.match(publicDesktop.text, /Lines pause overnight, on weekends, and on market holidays/);
   assert.match(publicDesktop.text, /Disarmed/);
   assert.match(publicDesktop.text, /Robinhood/);
   assert.match(publicDesktop.text, /Read the latest model decisions/);
@@ -262,7 +263,7 @@ try {
   assert.match(adminDesktop.text, /Run hourly during market hours/);
   assert.match(adminDesktop.text, /Weekly progress/);
   assert.match(adminDesktop.text, /Scheduler/);
-  assert.match(adminDesktop.text, /Connect Robinhood/);
+  assert.match(adminDesktop.text, /(?:Re)?connect Robinhood/);
   assert.match(adminDesktop.text, /Arm live execution/);
   assert.equal(adminDesktop.logoLoaded && adminMobile.logoLoaded, true);
   assert.match(adminDesktop.fontFamily, /Onest/);

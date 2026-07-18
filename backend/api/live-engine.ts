@@ -1,8 +1,10 @@
 import { APIError } from "encore.dev/api";
 import {
   COMPETITION_ROUND_DAYS,
-  DECISION_CYCLE_MINUTES,
+  nextDecisionCycleAt,
   regularMarketSessionOpen,
+  SCHEDULED_CYCLE_GRACE_MINUTES,
+  scheduledCycleIsRetry,
 } from "./arena-time";
 import { db } from "./db";
 import {
@@ -56,6 +58,8 @@ const QUANTITY_EPSILON = 0.000001;
 const SCHEDULER_STALE_CYCLE_MINUTES = 10;
 const SCHEDULER_RETRY_BASE_MINUTES = 5;
 const SCHEDULER_RETRY_MAX_MINUTES = 60;
+const MODEL_DECISION_ATTEMPTS = 2;
+const MODEL_RETRY_DELAY_MS = 600;
 const TERMINAL_ORDER_STATES = new Set([
   "cancelled",
   "canceled",
@@ -140,6 +144,21 @@ function concurrentBrokerSync(cause: unknown): boolean {
   return /reconciliation is already running/i.test(errorText(cause));
 }
 
+function submissionMayHaveReachedBroker(cause: unknown): boolean {
+  return /timeout|timed out|fetch failed|network|socket|connection|econn|aborted|http 5\d\d/i
+    .test(errorText(cause));
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function liveMarketSessionOpen(at = new Date()): boolean {
+  const testOverride = process.env.NODE_ENV !== "production"
+    && process.env.ARENA_TEST_MARKET_OPEN === "1";
+  return testOverride || regularMarketSessionOpen(at);
+}
+
 async function markSchedulerSeen(): Promise<void> {
   await db.exec`
     UPDATE arena_state SET scheduler_last_seen_at = now(), updated_at = now()
@@ -211,6 +230,12 @@ function brokerOrderFailure(
 ): { operatorMessage: string; publicMessage: string } {
   const detail = errorText(cause);
   const operatorMessage = `Robinhood rejected the live ${action}: ${detail}`;
+  if (submissionMayHaveReachedBroker(cause)) {
+    return {
+      operatorMessage: `Robinhood did not confirm the live ${action}: ${detail}`,
+      publicMessage: "Broker confirmation was interrupted. The arena is reconciling the submission before this model can place another order.",
+    };
+  }
   if (/investing goals|investor profile/i.test(detail)) {
     return {
       operatorMessage,
@@ -369,7 +394,7 @@ async function linkUnidentifiedOrders(
     if (candidates.length !== 1) continue;
     const brokerOrderId = candidates[0].broker_order_id;
     await db.exec`
-      UPDATE arena_orders SET broker_order_id = ${brokerOrderId}, updated_at = now()
+      UPDATE arena_orders SET broker_order_id = ${brokerOrderId}
       WHERE id = ${local.id} AND broker_order_id IS NULL
     `;
     claimed.add(brokerOrderId);
@@ -775,6 +800,7 @@ export async function ensureWeeklyCompetition(): Promise<void> {
     const endsAt = new Date(
       startedAt.getTime() + COMPETITION_ROUND_DAYS * 24 * 60 * 60 * 1000,
     );
+    const nextCycleAt = nextDecisionCycleAt(startedAt);
     const nextRound = await tx.queryRow<{ id: string }>`
       INSERT INTO arena_rounds (
         round_number, label, status, started_at, ends_at, starting_capital
@@ -803,7 +829,7 @@ export async function ensureWeeklyCompetition(): Promise<void> {
         cycle_in_progress = false,
         cycle_started_at = NULL,
         last_cycle_at = NULL,
-        next_cycle_at = now(),
+        next_cycle_at = ${nextCycleAt},
         competition_started_at = ${startedAt},
         competition_ends_at = ${endsAt},
         last_round_at = ${startedAt},
@@ -1012,17 +1038,23 @@ async function requestModelDecisions(
   positions: ArenaPosition[],
 ): Promise<ProviderOutcome[]> {
   return Promise.all(agents.map(async (agent): Promise<ProviderOutcome> => {
-    try {
-      const result = await requestOpenRouterDecision(
-        decisionInput(roundNumber, cycleNumber, agent, market, positions),
-      );
-      return { ok: true, agent, result };
-    } catch (cause) {
-      const error = cause instanceof OpenRouterRequestError
-        ? cause
-        : new OpenRouterRequestError(errorText(cause), 0);
-      return { ok: false, agent, error };
+    let lastError = new OpenRouterRequestError("Model decision failed", 0);
+    for (let attempt = 1; attempt <= MODEL_DECISION_ATTEMPTS; attempt += 1) {
+      try {
+        const result = await requestOpenRouterDecision(
+          decisionInput(roundNumber, cycleNumber, agent, market, positions),
+        );
+        return { ok: true, agent, result };
+      } catch (cause) {
+        lastError = cause instanceof OpenRouterRequestError
+          ? cause
+          : new OpenRouterRequestError(errorText(cause), 0);
+        if (attempt < MODEL_DECISION_ATTEMPTS) {
+          await wait(MODEL_RETRY_DELAY_MS * attempt);
+        }
+      }
     }
+    return { ok: false, agent, error: lastError };
   }));
 }
 
@@ -1082,8 +1114,12 @@ async function createBrokerOrder(input: {
     return { id: local.id, brokerOrderId, status: result.status };
   } catch (cause) {
     const message = errorText(cause);
+    const submissionUnknown = submissionMayHaveReachedBroker(cause);
     await db.exec`
-      UPDATE arena_orders SET status = 'failed', error_message = ${message}, reconciled_at = now()
+      UPDATE arena_orders SET
+        status = ${submissionUnknown ? "submission_unknown" : "failed"},
+        error_message = ${message},
+        reconciled_at = ${submissionUnknown ? null : new Date()}
       WHERE id = ${local.id}
     `;
     throw new Error(message);
@@ -1102,8 +1138,10 @@ async function executeBuy(
       SELECT id FROM arena_positions
       WHERE agent_id = ${agent.id} AND symbol = ${decision.symbol} AND status = 'open'
     `,
-    db.queryRow<{ amount: string | number }>`
-      SELECT coalesce(sum(CASE WHEN side = 'buy' THEN requested_amount ELSE 0 END), 0) AS amount
+    db.queryRow<{ amount: string | number; order_count: string | number }>`
+      SELECT
+        coalesce(sum(CASE WHEN side = 'buy' THEN requested_amount ELSE 0 END), 0) AS amount,
+        count(*) AS order_count
       FROM arena_orders WHERE agent_id = ${agent.id} AND reconciled_at IS NULL
     `,
     db.queryRow<{ pnl: string | number }>`
@@ -1142,12 +1180,9 @@ async function executeBuy(
   };
   if (!quote) return rejection("Robinhood did not provide a current quote for this symbol.");
   if (existing) return rejection("One open position per model and symbol is enforced.");
-  const duplicateOrder = await db.queryRow<{ id: string }>`
-    SELECT id FROM arena_orders
-    WHERE agent_id = ${agent.id} AND symbol = ${decision.symbol} AND reconciled_at IS NULL
-    LIMIT 1
-  `;
-  if (duplicateOrder) return rejection("A Robinhood order is already pending for this model and symbol.");
+  if (numeric(pending?.order_count) > 0) {
+    return rejection("This model already has a Robinhood order awaiting reconciliation.");
+  }
   if (state.broker_unmanaged_positions.length > 0) {
     return rejection("Broker holdings differ from the arena ledger. Reconcile them before placing another order.");
   }
@@ -1271,11 +1306,11 @@ async function executeSell(
   }
   const pending = await db.queryRow<{ id: string }>`
     SELECT id FROM arena_orders
-    WHERE agent_id = ${agent.id} AND symbol = ${decision.symbol} AND reconciled_at IS NULL
+    WHERE agent_id = ${agent.id} AND reconciled_at IS NULL
     LIMIT 1
   `;
   if (pending) {
-    const message = "A Robinhood order is already pending for this model and symbol.";
+    const message = "This model already has a Robinhood order awaiting reconciliation.";
     await insertDecision({
       roundNumber,
       agentId: agent.id,
@@ -1374,7 +1409,7 @@ async function recordProviderFailure(
   roundNumber: number,
   fallbackSymbol: string,
 ): Promise<ModelRoundResult> {
-  const riskNote = `OpenRouter: ${outcome.error.message}`;
+  const riskNote = `Model gateway: ${outcome.error.message}`;
   await insertDecision({
     roundNumber,
     agentId: outcome.agent.id,
@@ -1409,7 +1444,7 @@ async function enforceHardExits(roundNumber: number): Promise<Set<string>> {
       AND (p.current_price <= p.stop_loss OR p.current_price >= p.take_profit)
       AND NOT EXISTS (
         SELECT 1 FROM arena_orders o
-        WHERE o.position_id = p.id AND o.reconciled_at IS NULL
+        WHERE o.agent_id = p.agent_id AND o.reconciled_at IS NULL
       )
   `;
   const exited = new Set<string>();
@@ -1453,16 +1488,22 @@ async function enforceHardExits(roundNumber: number): Promise<Set<string>> {
 
 export async function runLiveRound(options?: {
   brokerAlreadySynced?: boolean;
+  nextCycleAt?: Date;
 }): Promise<RunRoundResponse> {
   if (!openRouterConfigured()) throw APIError.failedPrecondition("OpenRouterAPIKey is not configured");
+  if (!liveMarketSessionOpen()) {
+    throw APIError.failedPrecondition(
+      "live decision cycles run only during the regular U.S. market session",
+    );
+  }
   await ensureWeeklyCompetition();
+  const scheduledNextCycleAt = options?.nextCycleAt || null;
   const claimed = await db.queryRow<{ round_number: number; cycle_number: number }>`
     UPDATE arena_state SET
       cycle_number = cycle_number + 1,
       cycle_in_progress = true,
       cycle_started_at = now(),
-      last_cycle_at = now(),
-      next_cycle_at = now() + (${DECISION_CYCLE_MINUTES} * interval '1 minute'),
+      next_cycle_at = coalesce(${scheduledNextCycleAt}, next_cycle_at),
       updated_at = now()
     WHERE id = 1 AND status = 'running' AND live_armed = true AND halted = false
       AND (
@@ -1534,6 +1575,12 @@ export async function runLiveRound(options?: {
     } catch {
       // The submitted orders remain in the audit ledger and the next sync retries reconciliation.
     }
+    await db.exec`
+      UPDATE arena_state SET last_cycle_at = now(), updated_at = now()
+      WHERE id = 1
+        AND round_number = ${claimed.round_number}
+        AND cycle_number = ${claimed.cycle_number}
+    `;
     const arena = await buildArena();
     const failed = roundResults.filter((result) => result.status === "failed").length;
     const completed = roundResults.filter((result) => result.status === "completed").length;
@@ -1568,10 +1615,14 @@ export async function armLiveArena(automationEnabled: boolean): Promise<BrokerAc
       `the Agentic account needs at least $${broker.allocated_capital.toFixed(2)} of buying power plus arena holdings`,
     );
   }
+  const scheduledAt = automationEnabled
+    ? (liveMarketSessionOpen() ? new Date() : nextDecisionCycleAt())
+    : null;
   await db.exec`
     UPDATE arena_state SET live_armed = true, automation_enabled = ${automationEnabled},
       halted = false, halt_reason = NULL, status = 'running',
       scheduler_consecutive_failures = 0, scheduler_retry_at = NULL,
+      next_cycle_at = coalesce(${scheduledAt}, next_cycle_at),
       updated_at = now()
     WHERE id = 1
   `;
@@ -1658,8 +1709,10 @@ export async function flattenManagedPositions(): Promise<number> {
 export async function scheduledLiveRound(): Promise<void> {
   await markSchedulerSeen();
   let cycleAttempted = false;
+  let retryCycleOnFailure = false;
   try {
     await recoverStaleCycle();
+    await ensureWeeklyCompetition();
     let state = await getArenaState();
     const executionEnabled = schedulerExecutionEnabled(state);
     if (
@@ -1687,7 +1740,6 @@ export async function scheduledLiveRound(): Promise<void> {
       }
     }
 
-    await ensureWeeklyCompetition();
     state = await getArenaState();
     if (!schedulerExecutionEnabled(state)) {
       await markSchedulerSuccess();
@@ -1700,30 +1752,65 @@ export async function scheduledLiveRound(): Promise<void> {
     if (!brokerSynced) {
       throw new Error("Robinhood did not provide a verified broker snapshot");
     }
-    if (!regularMarketSessionOpen()) {
-      if (state.scheduler_consecutive_failures === 0) await markSchedulerSuccess();
+    if (!liveMarketSessionOpen()) {
+      const nextCycleAt = nextDecisionCycleAt();
+      const storedNextCycle = new Date(state.next_cycle_at).getTime();
+      if (Math.abs(storedNextCycle - nextCycleAt.getTime()) >= 60_000) {
+        await db.exec`
+          UPDATE arena_state SET next_cycle_at = ${nextCycleAt}, updated_at = now()
+          WHERE id = 1
+        `;
+      }
+      await markSchedulerSuccess();
       return;
     }
     if (new Date(state.next_cycle_at).getTime() > Date.now()) {
       await markSchedulerSuccess();
       return;
     }
+    const retryingFailedCycle = scheduledCycleIsRetry(
+      state.next_cycle_at,
+      state.scheduler_retry_at,
+    );
+    const lastCycleAt = state.last_cycle_at
+      ? new Date(state.last_cycle_at).getTime()
+      : 0;
+    if (
+      !retryingFailedCycle
+      && lastCycleAt > 0
+      && Date.now() - lastCycleAt < SCHEDULED_CYCLE_GRACE_MINUTES * 60 * 1000
+    ) {
+      const nextCycleAt = nextDecisionCycleAt();
+      await db.exec`
+        UPDATE arena_state SET next_cycle_at = ${nextCycleAt}, updated_at = now()
+        WHERE id = 1
+      `;
+      await markSchedulerSuccess();
+      return;
+    }
 
     cycleAttempted = true;
-    const result = await runLiveRound({ brokerAlreadySynced: true });
+    retryCycleOnFailure = true;
+    const result = await runLiveRound({
+      brokerAlreadySynced: true,
+      nextCycleAt: nextDecisionCycleAt(),
+    });
     const attemptedModels = result.round_results.filter(
       (entry) => entry.status !== "skipped",
     );
-    if (
-      attemptedModels.length > 0
-      && attemptedModels.every((entry) => entry.status === "failed")
-    ) {
-      throw new Error("Every active model failed this decision cycle");
+    const failedModels = attemptedModels.filter((entry) => entry.status === "failed");
+    if (failedModels.length > 0) {
+      retryCycleOnFailure = failedModels.length === attemptedModels.length;
+      throw new Error(
+        retryCycleOnFailure
+          ? "Every active model failed this decision cycle"
+          : `${failedModels.length} active model decision${failedModels.length === 1 ? "" : "s"} failed this cycle`,
+      );
     }
     await markSchedulerSuccess();
   } catch (cause) {
     try {
-      await markSchedulerFailure(cause, cycleAttempted);
+      await markSchedulerFailure(cause, cycleAttempted && retryCycleOnFailure);
     } catch {
       // Preserve the original scheduler failure for cron monitoring.
     }

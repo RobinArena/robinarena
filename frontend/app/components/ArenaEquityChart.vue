@@ -18,6 +18,7 @@ const rangeDuration = {
   ALL: Number.POSITIVE_INFINITY,
 } as const;
 const dashPatterns = ["none", "10 5", "3 5", "13 4 3 4"];
+const maxConnectedGap = 20 * 60 * 1000;
 
 const focusedAgentId = ref("all");
 const hoverTimestamp = ref<number | null>(null);
@@ -39,7 +40,12 @@ const visibleSeries = computed(() => {
     );
     const inRange = sorted.filter((point) => Date.parse(point.captured_at) >= cutoff);
     const preceding = sorted.findLast((point) => Date.parse(point.captured_at) < cutoff);
-    const points = preceding
+    const firstInRange = inRange.at(0);
+    const continuousPreceding = preceding
+      && firstInRange
+      && Date.parse(firstInRange.captured_at) - Date.parse(preceding.captured_at)
+        <= maxConnectedGap;
+    const points = continuousPreceding
       ? [preceding, ...inRange]
       : inRange.length
         ? inRange
@@ -99,11 +105,7 @@ const chart = computed(() => {
   );
   const lines = activeSeries.value.map((item) => ({
     ...item,
-    path: item.points.map((point, index) => {
-      const pointX = x(Date.parse(point.captured_at));
-      const pointY = y(point.return_pct);
-      return `${index === 0 ? "M" : "L"}${pointX.toFixed(2)},${pointY.toFixed(2)}`;
-    }).join(" "),
+    path: connectedPath(item.points, x, y),
     last: item.points.at(-1),
   }));
   const grid = Array.from({ length: 5 }, (_, index) => {
@@ -194,6 +196,24 @@ function nearestPoint(
   return nearest;
 }
 
+function connectedPath(
+  points: api.EquityPoint[],
+  x: (timestamp: number) => number,
+  y: (value: number) => number,
+): string {
+  return points.map((point, index) => {
+    const timestamp = Date.parse(point.captured_at);
+    const previous = index > 0 ? points.at(index - 1) : undefined;
+    const previousTimestamp = previous
+      ? Date.parse(previous.captured_at)
+      : undefined;
+    const startsSegment = index === 0
+      || previousTimestamp === undefined
+      || timestamp - previousTimestamp > maxConnectedGap;
+    return `${startsSegment ? "M" : "L"}${x(timestamp).toFixed(2)},${y(point.return_pct).toFixed(2)}`;
+  }).join(" ");
+}
+
 function setHover(event: PointerEvent) {
   if (!chart.value) return;
   const element = event.currentTarget as SVGElement;
@@ -253,9 +273,17 @@ function miniPath(agentId: string): string {
   const timeSpan = Math.max(domain.timeHigh - domain.timeLow, 1);
   const valueSpan = Math.max(domain.high - domain.low, 0.01);
   return item.points.map((point, index) => {
-    const x = ((Date.parse(point.captured_at) - domain.timeLow) / timeSpan) * 160;
+    const timestamp = Date.parse(point.captured_at);
+    const previous = index > 0 ? item.points.at(index - 1) : undefined;
+    const previousTimestamp = previous
+      ? Date.parse(previous.captured_at)
+      : undefined;
+    const x = ((timestamp - domain.timeLow) / timeSpan) * 160;
     const y = ((domain.high - point.return_pct) / valueSpan) * 44;
-    return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
+    const startsSegment = index === 0
+      || previousTimestamp === undefined
+      || timestamp - previousTimestamp > maxConnectedGap;
+    return `${startsSegment ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
   }).join(" ");
 }
 
@@ -271,7 +299,7 @@ function miniZeroY(): number {
     <div class="chart-toolbar">
       <div>
         <strong>Portfolio comparison</strong>
-        <span>All returns share one scale and one Robinhood timeline</span>
+        <span>Market-hours marks share one scale; closed sessions appear as gaps</span>
       </div>
       <div class="chart-series-controls" role="group" aria-label="Portfolio shown on chart">
         <button

@@ -325,8 +325,9 @@ export async function listEquitySeries(): Promise<EquitySeries[]> {
     FROM (
       SELECT s.agent_id, a.name AS agent_name, a.accent,
         result.starting_equity AS initial_balance,
-        s.equity, s.captured_at,
-        row_number() OVER (PARTITION BY s.agent_id ORDER BY s.captured_at DESC) AS sequence
+        s.equity, s.source, s.captured_at,
+        row_number() OVER (PARTITION BY s.agent_id ORDER BY s.captured_at DESC) AS sequence,
+        row_number() OVER (PARTITION BY s.agent_id ORDER BY s.captured_at) AS opening_sequence
       FROM arena_equity_snapshots s
       JOIN arena_agents a ON a.id = s.agent_id
       JOIN arena_rounds round ON round.id = s.round_id AND round.status = 'active'
@@ -334,6 +335,15 @@ export async function listEquitySeries(): Promise<EquitySeries[]> {
         ON result.round_id = round.id AND result.agent_id = s.agent_id
     ) recent
     WHERE sequence <= 2016
+      AND (
+        source = 'allocation'
+        OR opening_sequence = 1
+        OR (
+          extract(isodow FROM captured_at AT TIME ZONE 'America/New_York') BETWEEN 1 AND 5
+          AND (captured_at AT TIME ZONE 'America/New_York')::time >= time '09:30'
+          AND (captured_at AT TIME ZONE 'America/New_York')::time < time '16:00'
+        )
+      )
     ORDER BY captured_at, agent_id
   `;
   const series = new Map<string, EquitySeries>();
@@ -511,12 +521,23 @@ export async function markToMarket(): Promise<void> {
 }
 
 export async function recordEquitySnapshots(): Promise<void> {
+  const marketSessionOpen = regularMarketSessionOpen();
   await db.exec`
     INSERT INTO arena_equity_snapshots (agent_id, equity, source, round_id)
     SELECT agent.id, agent.equity, 'robinhood_mcp', round.id
     FROM arena_agents agent
     CROSS JOIN arena_rounds round
     WHERE round.status = 'active'
+      AND (
+        ${marketSessionOpen}
+        OR agent.equity IS DISTINCT FROM (
+          SELECT previous.equity
+          FROM arena_equity_snapshots previous
+          WHERE previous.agent_id = agent.id AND previous.round_id = round.id
+          ORDER BY previous.captured_at DESC
+          LIMIT 1
+        )
+      )
   `;
   await db.exec`
     WITH peaks AS (

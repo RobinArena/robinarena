@@ -29,9 +29,12 @@ const accountScopedTools = new Set([
 let openRouterInFlight = 0;
 let maxOpenRouterInFlight = 0;
 let openRouterRequests = 0;
+let openRouterAttempts = 0;
+let injectedProviderRetry = false;
 let oauthRegistrations = 0;
 let oauthCodeExchanges = 0;
 let oauthRefreshes = 0;
+let dropNextPlacementResponse = false;
 const decisionInputs = [];
 const decisionSchemas = [];
 
@@ -187,6 +190,11 @@ const mcp = createServer(async (request, response) => {
       updated_at: new Date().toISOString(),
     };
     orders.push(order);
+    if (dropNextPlacementResponse) {
+      dropNextPlacementResponse = false;
+      response.destroy(new Error("simulated lost broker confirmation"));
+      return;
+    }
     payload = order;
   } else if (name === "cancel_equity_order") {
     payload = { order_id: args.order_id, status: "cancelled" };
@@ -242,12 +250,22 @@ const openrouter = createServer(async (request, response) => {
   openRouterInFlight += 1;
   maxOpenRouterInFlight = Math.max(maxOpenRouterInFlight, openRouterInFlight);
   const payload = await body(request);
+  openRouterAttempts += 1;
+  if (payload.model === "deepseek/deepseek-v4-pro" && !injectedProviderRetry) {
+    injectedProviderRetry = true;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    openRouterInFlight -= 1;
+    response.writeHead(503, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: { message: "temporary model gateway failure" } }));
+    return;
+  }
   decisionInputs.push(JSON.parse(payload.messages[1].content));
   decisionSchemas.push(payload.response_format.json_schema.schema);
   openRouterRequests += 1;
   await new Promise((resolve) => setTimeout(resolve, 120));
   const symbol = modelSymbols[payload.model];
-  const action = openRouterRequests <= 4 ? "buy" : "sell";
+  const allowedActions = payload.response_format.json_schema.schema.properties.action.enum;
+  const action = allowedActions.length === 1 ? allowedActions[0] : "sell";
   openRouterInFlight -= 1;
   json(response, {
     id: `generation-${payload.model}`,
@@ -335,7 +353,7 @@ try {
   assert.equal(oauthRefreshes, 1, "OAuth refreshes");
   assert.deepEqual([...mcpAuthorizationHeaders], ["Bearer refreshed-oauth-access"]);
 
-  await apiJson("/admin/arm", {
+  const armed = await apiJson("/admin/arm", {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -343,14 +361,15 @@ try {
       automation_enabled: false,
     }),
   });
+  const manualScheduleDeadline = armed.status.arena.arena.next_cycle_at;
   const round = await apiJson("/admin/round", {
     method: "POST",
     headers,
     body: JSON.stringify({ confirmation: "EXECUTE LIVE ROBINHOOD ORDERS" }),
   });
   const arena = round.status.arena;
-  assert.equal(arena.orders.length, 4);
-  assert.equal(arena.positions.length, 4);
+  assert.equal(arena.orders.length, 4, "first cycle broker orders");
+  assert.equal(arena.positions.length, 4, "first cycle reconciled positions");
   assert.equal(arena.orders.every((order) => order.status === "filled" && order.broker_order_id), true);
   assert.equal(arena.orders.every((order) => order.reconciled_at), true);
   assert.equal(arena.positions.every((position) => position.average_entry_price === prices[position.symbol]), true);
@@ -363,7 +382,13 @@ try {
   assert.equal(arena.arena.cycle_number, 1, "entry decision cycle number");
   assert.equal(arena.arena.total_equity, 100);
   assert.equal(arena.arena.pending_orders, 0);
-  assert.equal(maxOpenRouterInFlight, 4);
+  assert.equal(
+    arena.arena.next_cycle_at,
+    manualScheduleDeadline,
+    "manual cycles do not postpone the automatic deadline",
+  );
+  assert.equal(maxOpenRouterInFlight, 4, "parallel model decisions");
+  assert.equal(openRouterAttempts, 5, "one transient model failure was retried");
   assert.equal(
     decisionSchemas.slice(0, 4).every((schema) => (
       schema.properties.action.enum.length === 1
@@ -382,8 +407,8 @@ try {
     true,
     "provider-compatible structured output schema",
   );
-  assert.equal(toolCalls.get("review_equity_order"), 4);
-  assert.equal(toolCalls.get("place_equity_order"), 4);
+  assert.equal(toolCalls.get("review_equity_order"), 4, "first cycle order reviews");
+  assert.equal(toolCalls.get("place_equity_order"), 4, "first cycle order placements");
 
   const exitRound = await apiJson("/admin/round", {
     method: "POST",
@@ -401,6 +426,11 @@ try {
   assert.equal(exited.arena.total_equity, 100);
   assert.equal(exited.arena.pending_orders, 0);
   assert.equal(
+    exited.arena.next_cycle_at,
+    manualScheduleDeadline,
+    "repeated manual cycles leave the automatic deadline unchanged",
+  );
+  assert.equal(
     decisionSchemas.slice(4).every((schema) => schema.properties.action.enum.length === 3),
     true,
     "invested ledgers retain buy, sell, and hold choices",
@@ -408,12 +438,54 @@ try {
   assert.equal(toolCalls.get("review_equity_order"), 8);
   assert.equal(toolCalls.get("place_equity_order"), 8);
 
+  dropNextPlacementResponse = true;
+  const recoveryRound = await apiJson("/admin/round", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ confirmation: "EXECUTE LIVE ROBINHOOD ORDERS" }),
+  });
+  const recovered = recoveryRound.status.arena;
+  assert.equal(recovered.orders.length, 12);
+  assert.equal(
+    recovered.positions.length,
+    4,
+    JSON.stringify({
+      orders: recovered.orders.slice(0, 4),
+      decisions: recovered.decisions.filter((decision) => decision.cycle_number === 3),
+      integration: recovered.robinhood,
+    }),
+  );
+  assert.equal(
+    recovered.arena.pending_orders,
+    0,
+    JSON.stringify(recovered.orders.filter((order) => !order.reconciled_at)),
+  );
+  assert.equal(recovered.arena.next_cycle_at, manualScheduleDeadline);
+  assert.equal(
+    recovered.orders.every((order) => order.status !== "submission_unknown"),
+    true,
+    "an accepted order with a lost response is linked during reconciliation",
+  );
+  assert.equal(
+    recovered.decisions.some((decision) => (
+      decision.risk_note.includes("Broker confirmation was interrupted")
+    )),
+    true,
+    "the ambiguous submission is disclosed while reconciliation runs",
+  );
+  assert.equal(toolCalls.get("review_equity_order"), 12);
+  assert.equal(toolCalls.get("place_equity_order"), 12);
+
   const disarmed = await apiJson("/admin/disarm", { method: "POST", headers });
   assert.equal(disarmed.status.arena.arena.status, "running");
   assert.equal(disarmed.status.arena.arena.live_armed, false);
   assert.deepEqual(
     decisionInputs.map((input) => [input.round_number, input.cycle_number]),
-    [[1, 1], [1, 1], [1, 1], [1, 1], [1, 2], [1, 2], [1, 2], [1, 2]],
+    [
+      [1, 1], [1, 1], [1, 1], [1, 1],
+      [1, 2], [1, 2], [1, 2], [1, 2],
+      [1, 3], [1, 3], [1, 3], [1, 3],
+    ],
   );
   return {
     allocations: arena.models.map((model) => model.initial_balance),
@@ -421,16 +493,18 @@ try {
     reconciled_fills: arena.orders.length,
     positions_from_broker_fills: arena.positions.length,
     openrouter_max_concurrency: maxOpenRouterInFlight,
+    transient_model_retry_recovered: injectedProviderRetry && openRouterAttempts === 13,
     total_equity: arena.arena.total_equity,
     pending_orders: arena.arena.pending_orders,
     review_calls: toolCalls.get("review_equity_order"),
     placement_calls: toolCalls.get("place_equity_order"),
     reconciled_exits: exited.orders.filter((order) => order.side === "sell").length,
+    ambiguous_submission_reconciled: recovered.arena.pending_orders === 0,
     closed_trades: exited.trades.filter((trade) => trade.status === "closed").length,
     ending_positions: exited.positions.length,
     ending_cash_per_model: exited.models.map((model) => model.cash_balance),
     weekly_round_number: exited.arena.round_number,
-    decision_cycles: exited.arena.cycle_number,
+    decision_cycles: recovered.arena.cycle_number,
     round_duration_days: (
       new Date(exited.arena.round_ends_at).getTime()
       - new Date(exited.arena.round_started_at).getTime()

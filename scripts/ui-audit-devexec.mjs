@@ -41,8 +41,47 @@ async function auditPage(route, file, viewport, authenticated = false) {
   const horizontalOverflow = await page.evaluate(() => (
     document.documentElement.scrollWidth - document.documentElement.clientWidth
   ));
+  const responsiveLayout = await page.evaluate(() => {
+    const brand = document.querySelector(".brand");
+    const tools = document.querySelector(".header-tools");
+    const navigation = document.querySelector(".site-nav");
+    const navigationLinks = [...document.querySelectorAll(".site-nav a")];
+    const themeToggle = document.querySelector(".theme-toggle");
+    const labelledTableCell = document.querySelector(".data-table td[data-label]");
+    const heroActions = document.querySelector(".hero-actions");
+    const brandRect = brand?.getBoundingClientRect();
+    const toolsRect = tools?.getBoundingClientRect();
+    return {
+      navigationVisible: navigation ? getComputedStyle(navigation).display !== "none" : false,
+      headerCenterDelta: brandRect && toolsRect
+        ? Math.abs(
+          (brandRect.top + brandRect.height / 2)
+          - (toolsRect.top + toolsRect.height / 2),
+        )
+        : null,
+      shortestNavigationTarget: navigationLinks.length
+        ? Math.min(...navigationLinks.map((link) => link.getBoundingClientRect().height))
+        : null,
+      themeTargetHeight: themeToggle?.getBoundingClientRect().height || null,
+      labelledTableCellDisplay: labelledTableCell
+        ? getComputedStyle(labelledTableCell).display
+        : null,
+      labelledTableCellLabel: labelledTableCell?.getAttribute("data-label") || null,
+      heroActionColumns: heroActions && getComputedStyle(heroActions).display === "grid"
+        ? getComputedStyle(heroActions).gridTemplateColumns.split(" ").length
+        : null,
+    };
+  });
   await context.close();
-  return { text, logoLoaded, xProfileHref, xProfileLinkCount, fontFamily, horizontalOverflow };
+  return {
+    text,
+    logoLoaded,
+    xProfileHref,
+    xProfileLinkCount,
+    fontFamily,
+    horizontalOverflow,
+    responsiveLayout,
+  };
 }
 
 async function auditThemeSwitch() {
@@ -228,6 +267,8 @@ async function expectText(locator, pattern) {
 try {
   const publicDesktop = await auditPage("/", "arena-public-desktop.png", { width: 1440, height: 1000 });
   const publicMobile = await auditPage("/", "arena-public-mobile.png", { width: 390, height: 844 });
+  const publicCompact = await auditPage("/", "arena-public-compact.png", { width: 320, height: 700 });
+  const publicTablet = await auditPage("/", "arena-public-tablet.png", { width: 820, height: 1000 });
   const adminDesktop = await auditPage("/admin", "arena-admin-desktop.png", { width: 1440, height: 1000 }, true);
   const adminMobile = await auditPage("/admin", "arena-admin-mobile.png", { width: 390, height: 844 }, true);
   const lightTheme = await auditThemeSwitch();
@@ -258,6 +299,17 @@ try {
   assert.match(publicDesktop.fontFamily, /Onest/);
   assert.ok(publicDesktop.horizontalOverflow <= 1);
   assert.ok(publicMobile.horizontalOverflow <= 1);
+  assert.ok(publicCompact.horizontalOverflow <= 1);
+  assert.ok(publicTablet.horizontalOverflow <= 1);
+  assert.equal(publicMobile.responsiveLayout.navigationVisible, true);
+  assert.ok(publicMobile.responsiveLayout.headerCenterDelta <= 2);
+  assert.ok(publicMobile.responsiveLayout.shortestNavigationTarget >= 44);
+  assert.ok(publicMobile.responsiveLayout.themeTargetHeight >= 44);
+  assert.equal(publicMobile.responsiveLayout.labelledTableCellDisplay, "grid");
+  assert.equal(publicMobile.responsiveLayout.labelledTableCellLabel, "Model");
+  assert.equal(publicMobile.responsiveLayout.heroActionColumns, 2);
+  assert.equal(publicCompact.responsiveLayout.heroActionColumns, 1);
+  assert.ok(publicTablet.responsiveLayout.headerCenterDelta <= 2);
   assert.match(adminDesktop.text, /\$100\.00 allocation/);
   assert.match(adminDesktop.text, /\$25\.00/);
   assert.match(adminDesktop.text, /Run hourly around the clock/);
@@ -273,6 +325,8 @@ try {
   return {
     public_desktop: join(output, "arena-public-desktop.png"),
     public_mobile: join(output, "arena-public-mobile.png"),
+    public_compact: join(output, "arena-public-compact.png"),
+    public_tablet: join(output, "arena-public-tablet.png"),
     admin_desktop: join(output, "arena-admin-desktop.png"),
     admin_mobile: join(output, "arena-admin-mobile.png"),
     light_public_desktop: lightTheme.publicDesktop,

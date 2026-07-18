@@ -159,7 +159,7 @@ async function refreshArena(): Promise<void> {
 function inspectAgent(id: string) {
   selectAgent(id);
   if (import.meta.client) {
-    document.getElementById("agent-workspace")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("decisions")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
@@ -369,7 +369,7 @@ onBeforeUnmount(pause);
         </div>
       </section>
 
-      <section id="agent-workspace" class="activity-section section-anchor" aria-labelledby="activity-heading">
+      <section id="decisions" class="activity-section section-anchor" aria-labelledby="activity-heading">
         <div class="section-heading">
           <div>
             <h2 id="activity-heading">Read the latest model decisions</h2>
@@ -489,21 +489,21 @@ onBeforeUnmount(pause);
               </thead>
               <tbody>
                 <tr v-for="position in filteredPositions" :key="position.id">
-                  <td>
+                  <td data-label="Model">
                     <span class="table-model">
                       <ModelGlyph :code="position.agent_code" :accent="position.agent_accent" size="small" />
                       {{ position.agent_name }}
                     </span>
                   </td>
-                  <td><strong>{{ position.symbol }}</strong></td>
-                  <td>{{ formatQuantity(position.quantity) }}</td>
-                  <td>{{ formatPrice(position.average_entry_price) }}</td>
-                  <td>{{ formatPrice(position.current_price) }}</td>
-                  <td :class="position.unrealized_pnl >= 0 ? 'value-positive' : 'value-negative'">
+                  <td data-label="Asset"><strong>{{ position.symbol }}</strong></td>
+                  <td data-label="Quantity">{{ formatQuantity(position.quantity) }}</td>
+                  <td data-label="Entry">{{ formatPrice(position.average_entry_price) }}</td>
+                  <td data-label="Mark">{{ formatPrice(position.current_price) }}</td>
+                  <td data-label="Open P&amp;L" :class="position.unrealized_pnl >= 0 ? 'value-positive' : 'value-negative'">
                     {{ formatSignedCurrency(position.unrealized_pnl) }}
                     <small>{{ formatPercent(position.return_pct) }}</small>
                   </td>
-                  <td>{{ formatPrice(position.stop_loss) }}</td>
+                  <td data-label="Stop reference">{{ formatPrice(position.stop_loss) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -524,18 +524,18 @@ onBeforeUnmount(pause);
               </thead>
               <tbody>
                 <tr v-for="order in filteredOrders" :key="order.id">
-                  <td>
+                  <td data-label="Model">
                     <span class="table-model">
                       <ModelGlyph :code="order.agent_code" :accent="order.agent_accent" size="small" />
                       {{ order.agent_name }}
                     </span>
                   </td>
-                  <td><strong>{{ order.symbol }}</strong></td>
-                  <td class="text-capitalize">{{ order.side }}</td>
-                  <td>{{ order.requested_amount > 0 ? formatCurrency(order.requested_amount) : `${formatQuantity(order.requested_quantity)} shares` }}</td>
-                  <td>{{ order.filled_quantity > 0 ? `${formatQuantity(order.filled_quantity)} @ ${formatPrice(order.average_fill_price || 0)}` : "Awaiting fill" }}</td>
-                  <td><span class="broker-status">{{ order.status.replaceAll("_", " ") }}</span></td>
-                  <td>{{ formatRelativeTime(order.created_at) }}</td>
+                  <td data-label="Asset"><strong>{{ order.symbol }}</strong></td>
+                  <td data-label="Side" class="text-capitalize">{{ order.side }}</td>
+                  <td data-label="Requested">{{ order.requested_amount > 0 ? formatCurrency(order.requested_amount) : `${formatQuantity(order.requested_quantity)} shares` }}</td>
+                  <td data-label="Filled">{{ order.filled_quantity > 0 ? `${formatQuantity(order.filled_quantity)} @ ${formatPrice(order.average_fill_price || 0)}` : "Awaiting fill" }}</td>
+                  <td data-label="Broker status"><span class="broker-status">{{ order.status.replaceAll("_", " ") }}</span></td>
+                  <td data-label="Submitted">{{ formatRelativeTime(order.created_at) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -556,21 +556,21 @@ onBeforeUnmount(pause);
               </thead>
               <tbody>
                 <tr v-for="trade in filteredTrades" :key="trade.id">
-                  <td>
+                  <td data-label="Model">
                     <span class="table-model">
                       <ModelGlyph :code="trade.agent_code" :accent="trade.agent_accent" size="small" />
                       {{ trade.agent_name }}
                     </span>
                   </td>
-                  <td><strong>{{ trade.symbol }}</strong></td>
-                  <td>{{ formatQuantity(trade.quantity) }}</td>
-                  <td>{{ formatPrice(trade.entry_price) }}</td>
-                  <td>{{ formatPrice(trade.exit_price || 0) }}</td>
-                  <td :class="(trade.realized_pnl || 0) >= 0 ? 'value-positive' : 'value-negative'">
+                  <td data-label="Asset"><strong>{{ trade.symbol }}</strong></td>
+                  <td data-label="Quantity">{{ formatQuantity(trade.quantity) }}</td>
+                  <td data-label="Entry">{{ formatPrice(trade.entry_price) }}</td>
+                  <td data-label="Exit">{{ formatPrice(trade.exit_price || 0) }}</td>
+                  <td data-label="Realized P&amp;L" :class="(trade.realized_pnl || 0) >= 0 ? 'value-positive' : 'value-negative'">
                     {{ formatSignedCurrency(trade.realized_pnl || 0) }}
                     <small>{{ formatPercent(trade.return_pct || 0) }}</small>
                   </td>
-                  <td>{{ trade.exit_reason || "Model exit" }}</td>
+                  <td data-label="Reason">{{ trade.exit_reason || "Model exit" }}</td>
                 </tr>
               </tbody>
             </table>

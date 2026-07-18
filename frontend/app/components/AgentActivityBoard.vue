@@ -133,8 +133,8 @@ function formatCost(value?: number): string {
   >
     <aside class="agent-session-sidebar" aria-label="Agent sessions">
       <div class="agent-sidebar-heading">
-        <strong>Agents</strong>
-        <span>{{ models.length }} connected</span>
+        <strong>Models</strong>
+        <span>{{ models.length }} competitors</span>
       </div>
 
       <div class="agent-roster" aria-label="Choose an agent">
@@ -157,7 +157,7 @@ function formatCost(value?: number): string {
                 · {{ latestDecision(model.id)?.requested_action }}
                 {{ latestDecision(model.id)?.symbol }}
               </template>
-              <template v-else>No completed run</template>
+              <template v-else>No decision yet</template>
             </small>
           </span>
           <span
@@ -171,8 +171,8 @@ function formatCost(value?: number): string {
 
       <section v-if="modelDecisions.length" class="agent-run-history" aria-labelledby="run-history-heading">
         <div class="agent-sidebar-heading">
-          <strong id="run-history-heading">Run history</strong>
-          <span>{{ modelDecisions.length }} cycles</span>
+          <strong id="run-history-heading">Decision history</strong>
+          <span>{{ modelDecisions.length }} decisions</span>
         </div>
         <div class="agent-run-list">
           <button
@@ -209,7 +209,7 @@ function formatCost(value?: number): string {
         <div class="agent-session-status">
           <span>{{ selectedModel.strategy }}</span>
           <strong v-if="selectedDecision">
-            Cycle {{ selectedDecision.cycle_number }} complete
+            Decision from cycle {{ selectedDecision.cycle_number }}
           </strong>
           <strong v-else>Waiting for first run</strong>
         </div>
@@ -223,10 +223,10 @@ function formatCost(value?: number): string {
           <div class="transcript-message">
             <header>
               <div>
-                <span class="transcript-role">System</span>
-                <strong>Session brief</strong>
+                <span class="transcript-role">Portfolio</span>
+                <strong>Starting context</strong>
               </div>
-              <span>Live ledger context</span>
+              <span>Before this decision</span>
             </header>
             <p>{{ selectedModel.thesis }}</p>
             <dl class="session-ledger">
@@ -259,8 +259,8 @@ function formatCost(value?: number): string {
           <div class="transcript-message">
             <header>
               <div>
-                <span class="transcript-role">Model thought</span>
-                <strong>Published reasoning</strong>
+                <span class="transcript-role">Model</span>
+                <strong>Reasoning</strong>
               </div>
               <time :datetime="selectedDecision.created_at">
                 {{ formatClock(selectedDecision.created_at) }} ET
@@ -348,7 +348,7 @@ function formatCost(value?: number): string {
       <div v-else class="agent-session-empty">
         <Icon name="ph:waveform" aria-hidden="true" />
         <h3>Waiting for {{ selectedModel.name }}</h3>
-        <p>The published reasoning, requested action, risk verdict, and broker result will appear here after its first live cycle.</p>
+        <p>Its reasoning, requested trade, risk result, and broker outcome will appear after the first cycle.</p>
       </div>
 
       <details v-if="selectedDecision" class="agent-run-details">

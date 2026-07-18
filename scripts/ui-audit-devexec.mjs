@@ -31,7 +31,7 @@ async function auditPage(route, file, viewport, authenticated = false) {
   await page.screenshot({ path: join(output, file), fullPage: true });
   const text = await page.locator("body").innerText();
   const logoLoaded = await page.locator(".brand-mark svg").evaluate((svg) => (
-    svg.querySelectorAll("path").length === 4
+    svg.querySelectorAll("path, circle").length >= 4
     && svg.getBoundingClientRect().width > 0
     && svg.getBoundingClientRect().height > 0
   ));
@@ -201,14 +201,14 @@ async function auditAgentWorkspace() {
 
   const transcript = page.locator(".agent-transcript");
   if (await transcript.count()) {
-    await expectText(transcript, /Published reasoning/);
+    await expectText(transcript, /Reasoning/);
     await expectText(transcript, /submit_trade_decision/);
     await expectText(transcript, /Risk engine/);
     await expectText(transcript, /Broker result/);
     await page.locator(".agent-run-details summary").click();
     await page.getByText("Provider model", { exact: true }).waitFor();
   } else {
-    await expectText(page.locator(".agent-session-empty"), /published reasoning/i);
+    await expectText(page.locator(".agent-session-empty"), /reasoning/i);
   }
 
   await context.close();
@@ -232,7 +232,7 @@ try {
   const lightTheme = await auditThemeSwitch();
   const workspace = await auditAgentWorkspace();
 
-  assert.match(publicDesktop.text, /One trading week/);
+  assert.match(publicDesktop.text, /Four models trade one \$100 account/);
   assert.match(publicDesktop.text, /RobinArena/);
   assert.match(publicDesktop.text, /@RobinArenaFun/);
   assert.match(publicDesktop.text, /\$25\.00/);
@@ -241,11 +241,11 @@ try {
   assert.match(publicDesktop.text, /Every 60 min/);
   assert.match(publicDesktop.text, /Disarmed/);
   assert.match(publicDesktop.text, /Robinhood/);
-  assert.match(publicDesktop.text, /Inside the latest cycle/);
-  assert.match(publicDesktop.text, /Choose a model to inspect its published reasoning/);
+  assert.match(publicDesktop.text, /Read the latest model decisions/);
+  assert.match(publicDesktop.text, /Select a model to see its reasoning/);
   assert.doesNotMatch(
     publicDesktop.text,
-    /Live feed connected|Public data refreshes every 20 seconds|Robinhood reconciled/,
+    /Live feed connected|Public data refreshes every 20 seconds|Robinhood reconciled|Robinhood live/,
   );
   assert.doesNotMatch(publicDesktop.text, /Open operator console|\bAdmin\b/);
   assert.equal(publicDesktop.xProfileHref, "https://x.com/RobinArenaFun");

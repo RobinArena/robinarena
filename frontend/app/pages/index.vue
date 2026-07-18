@@ -3,14 +3,14 @@ import { formatCurrency, formatDateTime, formatPercent, formatPrice, formatQuant
 
 useSeoMeta({
   title: "Live LLM trading arena",
-  description: "Four language models compete for one week with isolated live allocations routed through OpenRouter and Robinhood.",
+  description: "Follow four language models trading separate allocations from one live Robinhood account for seven days.",
   ogTitle: "RobinArena | Live LLM trading arena",
-  ogDescription: "Four language models trade a live Robinhood allocation for one week. Follow every decision, position, and result.",
+  ogDescription: "Four language models trade separate ledgers from one live Robinhood account for seven days. Follow every decision and fill.",
   ogType: "website",
   ogUrl: "https://robinarena.fun",
   twitterCard: "summary",
   twitterTitle: "RobinArena | Live LLM trading arena",
-  twitterDescription: "Four language models trade a live Robinhood allocation for one week.",
+  twitterDescription: "Four language models trade separate ledgers from one live Robinhood account for seven days.",
 });
 useHead({
   link: [{ rel: "canonical", href: "https://robinarena.fun" }],
@@ -91,19 +91,21 @@ const summaryMetrics = computed(() => data.value ? [
   {
     label: "Combined equity",
     value: formatCurrency(data.value.arena.total_equity),
-    detail: `${formatSignedCurrency(data.value.arena.total_pnl)} across four isolated ledgers`,
+    detail: `${formatSignedCurrency(data.value.arena.total_pnl)} since the week opened`,
     tone: data.value.arena.total_pnl >= 0 ? "positive" : "negative",
   },
   {
     label: "Weekly return",
     value: formatPercent(data.value.arena.return_pct),
-    detail: `From ${formatCurrency(data.value.arena.starting_capital)} at the weekly open`,
+    detail: `Measured from the ${formatCurrency(data.value.arena.starting_capital)} opening balance`,
     tone: data.value.arena.return_pct >= 0 ? "positive" : "negative",
   },
   {
     label: "Open positions",
     value: String(data.value.arena.open_positions),
-    detail: `${data.value.arena.pending_orders} broker orders awaiting reconciliation`,
+    detail: data.value.arena.pending_orders === 0
+      ? "No orders awaiting a broker update"
+      : `${data.value.arena.pending_orders} ${data.value.arena.pending_orders === 1 ? "order" : "orders"} awaiting a broker update`,
     tone: "neutral",
   },
   {
@@ -186,13 +188,13 @@ onBeforeUnmount(pause);
     <template v-else-if="data">
       <header class="arena-hero">
         <div class="hero-copy">
-          <h1>Four models. One trading week.</h1>
+          <h1>Four models trade one $100 account.</h1>
           <p>
-            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 each control a separate {{ formatCurrency(data.arena.allocation_per_model) }} ledger. OpenRouter carries their decisions; Robinhood supplies the cash, positions, and fills.
+            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 each receive a {{ formatCurrency(data.arena.allocation_per_model) }} ledger for the seven-day round. OpenRouter records every decision while Robinhood reports the cash, holdings, orders, and fills.
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="#decisions">
-              Read model rationale
+              Read the decisions
             </a>
             <a class="button button-quiet" href="#ledger">
               Follow live execution
@@ -249,8 +251,11 @@ onBeforeUnmount(pause);
             </div>
           </dl>
 
-          <p class="round-scoreboard-foot">
-            {{ formatCurrency(data.arena.broker_equity ?? data.arena.capital_limit) }} verified broker equity across four isolated portfolios.
+          <p v-if="data.arena.broker_equity != null" class="round-scoreboard-foot">
+            Robinhood currently reports {{ formatCurrency(data.arena.broker_equity) }} across the four portfolios.
+          </p>
+          <p v-else class="round-scoreboard-foot">
+            Waiting for Robinhood to report the account balance.
           </p>
         </aside>
       </header>
@@ -276,7 +281,7 @@ onBeforeUnmount(pause);
           <div class="panel-heading">
             <div>
               <h2 id="performance-heading">Return this week</h2>
-              <p>Each line is indexed to its own weekly opening balance and changes only with reconciled broker data.</p>
+              <p>Each line shows one model’s return from its opening allocation, using only reconciled Robinhood data.</p>
             </div>
             <div class="range-control" role="group" aria-label="Chart range">
               <button
@@ -338,12 +343,8 @@ onBeforeUnmount(pause);
       <section id="agent-workspace" class="activity-section section-anchor" aria-labelledby="activity-heading">
         <div class="section-heading">
           <div>
-            <h2 id="activity-heading">Inside the latest cycle</h2>
-            <p>Choose a model to inspect its published reasoning, requested action, risk response, and Robinhood result.</p>
-          </div>
-          <div class="section-fact">
-            <span>Decision cycle</span>
-            <strong>Cycle {{ data.arena.cycle_number }}</strong>
+            <h2 id="activity-heading">Read the latest model decisions</h2>
+            <p>Select a model to see its reasoning, requested trade, risk review, and Robinhood result.</p>
           </div>
         </div>
         <AgentActivityBoard
@@ -360,7 +361,7 @@ onBeforeUnmount(pause);
         <div class="section-heading">
           <div>
             <h2 id="models-heading">The competitors</h2>
-            <p>Each model sees the same Robinhood quote snapshot. Its strategy, confidence, and isolated ledger determine the request.</p>
+            <p>Each model receives the same Robinhood quote snapshot. Its strategy, risk limits, and ledger determine what it requests.</p>
           </div>
           <div class="section-fact">
             <span>Portfolio rule</span>
@@ -405,7 +406,7 @@ onBeforeUnmount(pause);
             </dl>
             <div class="model-card-foot">
               <button type="button" @click="inspectAgent(model.id)">
-                Open agent session
+                See model decisions
                 <Icon name="ph:arrow-down-right" aria-hidden="true" />
               </button>
             </div>
@@ -418,7 +419,7 @@ onBeforeUnmount(pause);
           <div class="panel-heading">
             <div>
               <h2 id="decisions-heading">Decision stream</h2>
-              <p>Every submitted rationale and risk result, newest first.</p>
+              <p>The models’ reasoning and risk results, newest first.</p>
             </div>
             <label class="model-filter">
               <span>Model</span>
@@ -435,7 +436,7 @@ onBeforeUnmount(pause);
           <div class="panel-heading ledger-heading">
             <div>
               <h2>Execution ledger</h2>
-              <p>Orders and positions reflect Robinhood broker state and reported fill prices.</p>
+              <p>Positions and orders mirror Robinhood’s reported state and fill prices.</p>
             </div>
             <div class="ledger-tabs" role="tablist" aria-label="Ledger view">
               <button type="button" role="tab" :aria-selected="ledgerView === 'positions'" :class="{ 'is-active': ledgerView === 'positions' }" @click="ledgerView = 'positions'">Positions</button>
@@ -556,11 +557,11 @@ onBeforeUnmount(pause);
       <footer class="arena-footer">
         <div>
           <strong>RobinArena execution protocol</strong>
-          <p>OpenRouter returns one structured decision per model in each eligible cycle. An empty ledger must request a 20–40% opening position. Confidence, cash, position size, daily loss, and broker reconciliation gates run before any live order is reviewed.</p>
+          <p>Each eligible cycle asks every model for one structured decision through OpenRouter. An empty portfolio must request a 20–40% opening position. Risk checks review confidence, cash, position size, daily loss, and the latest Robinhood reconciliation before an order can reach the broker.</p>
         </div>
         <dl>
           <div><dt>Round length</dt><dd>7 days</dd></div>
-          <div><dt>Decision cadence</dt><dd>Hourly market session</dd></div>
+          <div><dt>Decision cadence</dt><dd>Every market hour</dd></div>
           <div><dt>Direction</dt><dd>Long only</dd></div>
           <div><dt>Hard stop</dt><dd>5% from entry</dd></div>
         </dl>

@@ -46,10 +46,6 @@ const themeToggleLabel = computed(() => (
           <Icon name="ph:x-logo" aria-hidden="true" />
           <span>@RobinArenaFun</span>
         </a>
-        <div class="nav-state" aria-label="Arena mode">
-          <Icon name="ph:shield-check" aria-hidden="true" />
-          Robinhood live
-        </div>
         <button
           class="theme-toggle"
           type="button"

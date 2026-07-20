@@ -1,4 +1,8 @@
 import { asArray, asRecord, collectRecords, numberField, payloadRecord, stringField } from "./json-utils";
+import {
+  robinhoodOrderArguments,
+  type RobinhoodOrderRequest,
+} from "./robinhood-order";
 import { robinhoodAccessToken } from "./robinhood-oauth";
 import { readOptionalSecret, robinhoodMcpAccessToken } from "./secrets";
 import type { RobinhoodIntegration } from "./types";
@@ -62,16 +66,6 @@ export interface RobinhoodOrderSnapshot {
   filled_quantity: number;
   average_fill_price?: number;
   as_of?: string;
-}
-
-export interface RobinhoodOrderRequest {
-  symbol: string;
-  side: "buy" | "sell";
-  amount?: number;
-  quantity?: number;
-  limitPrice?: number;
-  marketHours?: "regular_hours" | "extended_hours" | "all_day_hours";
-  refId: string;
 }
 
 export interface RobinhoodOrderResult {
@@ -413,37 +407,8 @@ export class RobinhoodMcpClient {
   }
 
   async placeOrder(order: RobinhoodOrderRequest): Promise<RobinhoodOrderResult> {
-    if ((order.amount === undefined) === (order.quantity === undefined)) {
-      throw new Error("Robinhood equity orders require either an amount or a quantity");
-    }
     const agenticAccount = await this.agenticAccount();
-    const marketHours = order.marketHours || "regular_hours";
-    const wholeShareLimit = marketHours !== "regular_hours";
-    if (wholeShareLimit) {
-      if (
-        order.amount !== undefined
-        || !order.quantity
-        || !Number.isInteger(order.quantity)
-        || order.quantity < 1
-      ) {
-        throw new Error("Robinhood orders outside regular hours require a positive whole-share quantity");
-      }
-      if (!order.limitPrice || order.limitPrice <= 0) {
-        throw new Error("Robinhood orders outside regular hours require a positive limit price");
-      }
-    }
-    const args: Record<string, unknown> = {
-      account_number: agenticAccount.accountNumber,
-      symbol: order.symbol,
-      side: order.side,
-      type: wholeShareLimit ? "limit" : "market",
-      time_in_force: "gfd",
-      market_hours: marketHours,
-      ref_id: order.refId,
-      ...(order.amount !== undefined ? { dollar_amount: String(order.amount) } : {}),
-      ...(order.quantity !== undefined ? { quantity: String(order.quantity) } : {}),
-      ...(wholeShareLimit ? { limit_price: String(order.limitPrice) } : {}),
-    };
+    const args = robinhoodOrderArguments(agenticAccount.accountNumber, order);
     const review = await this.callTool("review_equity_order", args);
     const payload = await this.callTool("place_equity_order", args);
     const brokerOrderId = collectRecords(payload)

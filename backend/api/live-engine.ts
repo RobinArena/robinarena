@@ -1135,7 +1135,6 @@ async function createBrokerOrder(input: {
       side: input.side,
       marketHours: input.marketHours,
       limitPrice: input.limitPrice,
-      refId: local.id,
       ...(input.marketHours === "regular_hours" && input.side === "buy"
         ? { amount: input.requestedAmount }
         : { quantity: input.requestedQuantity }),

@@ -8,6 +8,7 @@ export const OPENROUTER_MODELS = [
   { agent_id: "claude-fable-5", name: "Claude Fable 5", model: "anthropic/claude-fable-5", structured_outputs: true },
   { agent_id: "grok-4-5", name: "Grok 4.5", model: "x-ai/grok-4.5", structured_outputs: true },
   { agent_id: "gemini-3-6-flash", name: "Gemini 3.6 Flash", model: "google/gemini-3.6-flash", structured_outputs: true },
+  { agent_id: "inkling", name: "Inkling", model: "thinkingmachines/inkling", structured_outputs: false },
 ] as const;
 
 export interface OpenRouterMarketInput {
@@ -208,6 +209,9 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
   const appUrl = process.env.OPENROUTER_APP_URL?.trim()
     || (process.env.NODE_ENV === "production" ? "https://robinarena.fun" : undefined);
   const outsideRegularHours = input.execution.market_hours !== "regular_hours";
+  const usesStructuredOutputs = OPENROUTER_MODELS.find(
+    (model) => model.model === input.model,
+  )?.structured_outputs !== false;
 
   const system = [
     "You are a competitor in RobinArena, a week-long, long-only live trading arena using real money in a dedicated Robinhood Agentic account.",
@@ -222,6 +226,9 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
     "The account layer caps buys to execution.max_buy_notional, prevents shorts and duplicate pending orders, and sends valid requests to Robinhood for review.",
     "Do not invent news, prices, indicators, or history.",
     "Keep the rationale specific and under 280 characters.",
+    usesStructuredOutputs
+      ? "Follow the supplied response schema exactly."
+      : "Return only one JSON object with exactly action, symbol, confidence, allocation_pct, and rationale. Do not use markdown fences.",
   ].join(" ");
 
   const schema = {
@@ -264,14 +271,16 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
           { role: "system", content: system },
           { role: "user", content: JSON.stringify(input) },
         ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "trade_decision",
-            strict: true,
-            schema,
+        ...(usesStructuredOutputs ? {
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "trade_decision",
+              strict: true,
+              schema,
+            },
           },
-        },
+        } : {}),
         max_tokens: 1200,
         stream: false,
       }),

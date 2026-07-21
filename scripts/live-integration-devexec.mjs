@@ -12,12 +12,12 @@ const outsideRegularHours = tradingSession !== "regular_hours";
 const prices = {
   ACHR: 4.47,
   AMZN: 210,
-  JOBY: 7.23,
-  LCID: 7.18,
+  JOBY: 5.23,
+  LCID: 5.18,
   META: 640,
   MSFT: 505,
-  NVDA: 170,
-  PAGS: 9.07,
+  NVDA: 5.7,
+  PAGS: 5.07,
   SOUN: 6.27,
   SPY: 690,
   TSLA: 430,
@@ -29,6 +29,7 @@ const modelSymbols = outsideRegularHours
       "anthropic/claude-fable-5": "PAGS",
       "x-ai/grok-4.5": "SOUN",
       "google/gemini-3.6-flash": "LCID",
+      "thinkingmachines/inkling": "NVDA",
     }
   : {
       "openai/gpt-5.6-sol": "AMZN",
@@ -36,6 +37,7 @@ const modelSymbols = outsideRegularHours
       "anthropic/claude-fable-5": "MSFT",
       "x-ai/grok-4.5": "NVDA",
       "google/gemini-3.6-flash": "SPY",
+      "thinkingmachines/inkling": "TSLA",
     };
 const orders = [];
 const toolCalls = new Map();
@@ -61,6 +63,7 @@ let dropNextPlacementResponse = false;
 let brokerTotalValue = 80;
 const decisionInputs = [];
 const decisionSchemas = [];
+const unstructuredModels = new Set();
 
 function cashBalance() {
   return orders.reduce((cash, order) => {
@@ -325,7 +328,11 @@ const openrouter = createServer(async (request, response) => {
   }
   const decisionInput = JSON.parse(payload.messages[1].content);
   decisionInputs.push(decisionInput);
-  decisionSchemas.push(payload.response_format.json_schema.schema);
+  if (payload.response_format?.json_schema?.schema) {
+    decisionSchemas.push(payload.response_format.json_schema.schema);
+  } else {
+    unstructuredModels.add(payload.model);
+  }
   openRouterRequests += 1;
   await new Promise((resolve) => setTimeout(resolve, 120));
   const symbol = modelSymbols[payload.model];
@@ -363,9 +370,9 @@ try {
   const unauthorized = await api("/admin/status");
   assert.equal(unauthorized.status, 401);
   const initial = await apiJson("/arena");
-  assert.equal(initial.arena.starting_capital, 100);
-  assert.equal(initial.arena.operator_capital_ceiling, 100);
-  assert.equal(initial.arena.allocation_per_model, 20);
+  assert.equal(initial.arena.starting_capital, 100.0002);
+  assert.equal(initial.arena.operator_capital_ceiling, 100.0002);
+  assert.equal(initial.arena.allocation_per_model, 16.6667);
   assert.equal(initial.arena.round_number, 1, "initial weekly round number");
   assert.equal(initial.arena.cycle_number, 0);
   assert.equal(initial.arena.scheduler_status, "inactive");
@@ -376,7 +383,7 @@ try {
   );
   assert.equal(initial.round_history.length, 1, "initial weekly round history");
   assert.equal(initial.round_history[0].status, "active");
-  assert.deepEqual(initial.models.map((model) => model.initial_balance), [20, 20, 20, 20, 20]);
+  assert.deepEqual(initial.models.map((model) => model.initial_balance), [16.6667, 16.6667, 16.6667, 16.6667, 16.6667, 16.6667]);
   assert.equal(
     initial.market.length === 0
       || (
@@ -407,11 +414,11 @@ try {
   assert.equal(oauthStatus.scheduler.consecutive_failures, 0);
   const sync = await apiJson("/admin/sync", { method: "POST", headers });
   assert.equal(sync.status.arena.market.length, 11);
-  assert.deepEqual(sync.status.arena.models.map((model) => model.initial_balance), [16, 16, 16, 16, 16]);
-  assert.equal(sync.status.arena.arena.capital_limit, 80);
+  assert.deepEqual(sync.status.arena.models.map((model) => model.initial_balance), [13.3333, 13.3333, 13.3333, 13.3333, 13.3333, 13.3333]);
+  assert.equal(sync.status.arena.arena.capital_limit, 79.9998);
   assert.equal(sync.status.broker.equity, 80);
   assert.equal(sync.status.broker.deployable_capital, 80);
-  assert.equal(sync.status.broker.allocation_per_model, 16);
+  assert.equal(sync.status.broker.allocation_per_model, 13.3333);
   assert.equal(sync.status.broker.capital_source, "robinhood");
   assert.equal(sync.status.arena.arena.live_armed, false);
 
@@ -419,25 +426,25 @@ try {
   const deposited = await apiJson("/admin/sync", { method: "POST", headers });
   assert.deepEqual(
     deposited.status.arena.models.map((model) => model.initial_balance),
-    [20, 20, 20, 20, 20],
+    [16.6667, 16.6667, 16.6667, 16.6667, 16.6667, 16.6667],
     "a broker capital increase is split equally across agent baselines",
   );
   assert.deepEqual(
     deposited.status.arena.models.map((model) => model.cash_balance),
-    [20, 20, 20, 20, 20],
+    [16.6667, 16.6667, 16.6667, 16.6667, 16.6667, 16.6667],
     "a broker capital increase is credited equally to agent cash",
   );
   assert.deepEqual(
     deposited.status.arena.models.map((model) => model.equity),
-    [20, 20, 20, 20, 20],
+    [16.6667, 16.6667, 16.6667, 16.6667, 16.6667, 16.6667],
     "a broker capital increase is credited equally to agent equity",
   );
-  assert.equal(deposited.status.arena.arena.starting_capital, 100);
+  assert.equal(deposited.status.arena.arena.starting_capital, 100.0002);
   assert.equal(deposited.status.broker.deployable_capital, 100);
-  assert.equal(deposited.status.broker.allocation_per_model, 20);
+  assert.equal(deposited.status.broker.allocation_per_model, 16.6667);
   assert.equal(
     deposited.status.arena.equity_series.every((series) => (
-      series.points.every((point) => point.equity === 20 && point.profit === 0)
+      series.points.every((point) => point.equity === 16.6667 && point.profit === 0)
     )),
     true,
     "capital deposits restate prior snapshots without creating artificial profit",
@@ -462,8 +469,8 @@ try {
     body: JSON.stringify({ confirmation: "EXECUTE LIVE ROBINHOOD ORDERS" }),
   });
   const arena = round.status.arena;
-  assert.equal(arena.orders.length, 5, "first cycle broker orders");
-  assert.equal(arena.positions.length, 5, "first cycle reconciled positions");
+  assert.equal(arena.orders.length, 6, "first cycle broker orders");
+  assert.equal(arena.positions.length, 6, "first cycle reconciled positions");
   assert.equal(arena.orders.every((order) => order.status === "filled" && order.broker_order_id), true);
   assert.equal(arena.orders.every((order) => order.reconciled_at), true);
   assert.equal(arena.positions.every((position) => position.broker_order_id), true);
@@ -485,24 +492,24 @@ try {
       "orders outside regular hours use whole shares",
     );
     assert.equal(
-      arena.models.every((model) => model.cash_balance < 20),
+      arena.models.every((model) => model.cash_balance < 16.6667),
       true,
       "whole-share buys outside regular hours debit each model ledger",
     );
   } else {
-    assert.equal(arena.models.every((model) => model.cash_balance === 16), true);
+    assert.equal(arena.models.every((model) => model.cash_balance === 13.3367), true);
   }
   assert.equal(arena.arena.round_number, 1, "weekly round after entry cycle");
   assert.equal(arena.arena.cycle_number, 1, "entry decision cycle number");
-  assert.equal(arena.arena.total_equity, 100);
+  assert.equal(arena.arena.total_equity, 100.0002);
   assert.equal(arena.arena.pending_orders, 0);
   assert.equal(
     arena.arena.next_cycle_at,
     manualScheduleDeadline,
     "manual cycles do not postpone the automatic deadline",
   );
-  assert.equal(maxOpenRouterInFlight, 5, "parallel model decisions");
-  assert.equal(openRouterAttempts, 6, "one transient model failure was retried");
+  assert.equal(maxOpenRouterInFlight, 6, "parallel model decisions");
+  assert.equal(openRouterAttempts, 7, "one transient model failure was retried");
   assert.equal(
     decisionSchemas.slice(0, 5).every((schema) => (
       schema.properties.action.enum.length === 3
@@ -513,8 +520,13 @@ try {
     true,
     "empty ledgers leave buy, sell, and hold under model control",
   );
+  assert.deepEqual(
+    [...unstructuredModels],
+    ["thinkingmachines/inkling"],
+    "models without structured-output support use the JSON-only fallback",
+  );
   assert.equal(
-    decisionInputs.slice(0, 5).every((input) => (
+    decisionInputs.slice(0, 6).every((input) => (
       input.execution.market_hours === tradingSession
       && input.execution.whole_shares_only === outsideRegularHours
     )),
@@ -531,8 +543,8 @@ try {
     true,
     "provider-compatible structured output schema",
   );
-  assert.equal(toolCalls.get("review_equity_order"), 5, "first cycle order reviews");
-  assert.equal(toolCalls.get("place_equity_order"), 5, "first cycle order placements");
+  assert.equal(toolCalls.get("review_equity_order"), 6, "first cycle order reviews");
+  assert.equal(toolCalls.get("place_equity_order"), 6, "first cycle order placements");
 
   const exitRound = await apiJson("/admin/round", {
     method: "POST",
@@ -540,14 +552,14 @@ try {
     body: JSON.stringify({ confirmation: "EXECUTE LIVE ROBINHOOD ORDERS" }),
   });
   const exited = exitRound.status.arena;
-  assert.equal(exited.orders.length, 10);
+  assert.equal(exited.orders.length, 12);
   assert.equal(exited.positions.length, 0);
-  assert.equal(exited.trades.filter((trade) => trade.status === "closed").length, 5);
-  assert.equal(exited.models.every((model) => model.cash_balance === 20), true);
+  assert.equal(exited.trades.filter((trade) => trade.status === "closed").length, 6);
+  assert.equal(exited.models.every((model) => model.cash_balance === 16.6667), true);
   assert.equal(exited.arena.round_number, 1, "weekly round after exit cycle");
   assert.equal(exited.arena.cycle_number, 2);
-  assert.equal(exited.decisions.filter((decision) => decision.cycle_number === 2).length, 5);
-  assert.equal(exited.arena.total_equity, 100);
+  assert.equal(exited.decisions.filter((decision) => decision.cycle_number === 2).length, 6);
+  assert.equal(exited.arena.total_equity, 100.0002);
   assert.equal(exited.arena.pending_orders, 0);
   assert.equal(
     exited.arena.next_cycle_at,
@@ -559,8 +571,8 @@ try {
     true,
     "invested ledgers retain buy, sell, and hold choices",
   );
-  assert.equal(toolCalls.get("review_equity_order"), 10);
-  assert.equal(toolCalls.get("place_equity_order"), 10);
+  assert.equal(toolCalls.get("review_equity_order"), 12);
+  assert.equal(toolCalls.get("place_equity_order"), 12);
 
   dropNextPlacementResponse = true;
   const recoveryRound = await apiJson("/admin/round", {
@@ -569,12 +581,12 @@ try {
     body: JSON.stringify({ confirmation: "EXECUTE LIVE ROBINHOOD ORDERS" }),
   });
   const recovered = recoveryRound.status.arena;
-  assert.equal(recovered.orders.length, 15);
+  assert.equal(recovered.orders.length, 18);
   assert.equal(
     recovered.positions.length,
-    5,
+    6,
     JSON.stringify({
-      orders: recovered.orders.slice(0, 5),
+      orders: recovered.orders.slice(0, 6),
       decisions: recovered.decisions.filter((decision) => decision.cycle_number === 3),
       integration: recovered.robinhood,
     }),
@@ -597,8 +609,8 @@ try {
     true,
     "the ambiguous submission is disclosed while reconciliation runs",
   );
-  assert.equal(toolCalls.get("review_equity_order"), 15);
-  assert.equal(toolCalls.get("place_equity_order"), 15);
+  assert.equal(toolCalls.get("review_equity_order"), 18);
+  assert.equal(toolCalls.get("place_equity_order"), 18);
 
   const disarmed = await apiJson("/admin/disarm", { method: "POST", headers });
   assert.equal(disarmed.status.arena.arena.status, "running");
@@ -606,9 +618,9 @@ try {
   assert.deepEqual(
     decisionInputs.map((input) => [input.round_number, input.cycle_number]),
     [
-      [1, 1], [1, 1], [1, 1], [1, 1], [1, 1],
-      [1, 2], [1, 2], [1, 2], [1, 2], [1, 2],
-      [1, 3], [1, 3], [1, 3], [1, 3], [1, 3],
+      [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1],
+      [1, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2],
+      [1, 3], [1, 3], [1, 3], [1, 3], [1, 3], [1, 3],
     ],
   );
   return {
@@ -618,7 +630,7 @@ try {
     reconciled_fills: arena.orders.length,
     positions_from_broker_fills: arena.positions.length,
     openrouter_max_concurrency: maxOpenRouterInFlight,
-    transient_model_retry_recovered: injectedProviderRetry && openRouterAttempts === 16,
+    transient_model_retry_recovered: injectedProviderRetry && openRouterAttempts === 19,
     total_equity: arena.arena.total_equity,
     pending_orders: arena.arena.pending_orders,
     review_calls: toolCalls.get("review_equity_order"),

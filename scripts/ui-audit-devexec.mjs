@@ -179,6 +179,7 @@ async function auditAgentWorkspace() {
     "/providers/deepseek.png",
     "/providers/google-gemini.svg",
     "/providers/openai.png",
+    "/providers/thinking-machines.svg",
     "/providers/xai.png",
   ]);
   assert.equal(
@@ -190,9 +191,9 @@ async function auditAgentWorkspace() {
 
   const portfolioLanes = page.locator(".portfolio-lane");
   const portfolioLaneCount = await portfolioLanes.count();
-  assert.equal(portfolioLaneCount, 5);
+  assert.equal(portfolioLaneCount, 6);
   const seriesControls = page.locator(".chart-series-controls button");
-  assert.equal(await seriesControls.count(), 6);
+  assert.equal(await seriesControls.count(), 7);
   await seriesControls.nth(2).click();
   assert.equal(await page.locator(".model-chart-line").count(), 1);
   assert.match(
@@ -200,7 +201,7 @@ async function auditAgentWorkspace() {
     /Profit history for/,
   );
   await seriesControls.first().click();
-  assert.equal(await page.locator(".model-chart-line").count(), 5);
+  assert.equal(await page.locator(".model-chart-line").count(), 6);
   const axisLabels = await page.locator(".chart-axis-label:not(.chart-time-label)").allTextContents();
   assert.equal(axisLabels.length, 5);
   assert.equal(axisLabels.every((label) => /\$/.test(label)), true, "profit axis uses dollar values");
@@ -208,13 +209,13 @@ async function auditAgentWorkspace() {
   for (const [index, range] of ["1D", "5D", "ALL"].entries()) {
     await rangeControls.nth(index).click();
     assert.equal(await rangeControls.nth(index).getAttribute("aria-pressed"), "true");
-    assert.equal(await page.locator(".model-chart-line").count(), 5);
+    assert.equal(await page.locator(".model-chart-line").count(), 6);
     assert.ok(new Set(await page.locator(".chart-time-label").allTextContents()).size > 0);
     assert.equal((await rangeControls.allTextContents())[index]?.trim(), range);
   }
 
   const roster = page.locator(".agent-roster-item");
-  assert.equal(await roster.count(), 5);
+  assert.equal(await roster.count(), 6);
   const target = roster.nth(1);
   const expectedName = (await target.locator("strong").first().innerText()).trim();
   await target.click();
@@ -281,8 +282,8 @@ try {
   assert.match(publicDesktop.text, /Frontier AI models compete in live trading on Robinhood/);
   assert.match(publicDesktop.text, /RobinArena/);
   assert.match(publicDesktop.text, /@RobinArenaFun/);
-  assert.match(publicDesktop.text, /\$20\.00/);
-  assert.equal(publicDesktop.leaderboardBalances.length, 5);
+  assert.match(publicDesktop.text, /\$16\.67/);
+  assert.equal(publicDesktop.leaderboardBalances.length, 6);
   assert.equal(
     publicDesktop.leaderboardBalances.every((balance) => /^\$[\d,]+\.\d{2}$/.test(balance.trim())),
     true,
@@ -324,7 +325,7 @@ try {
   assert.equal(publicCompact.responsiveLayout.heroActionColumns, 1);
   assert.ok(publicTablet.responsiveLayout.headerCenterDelta <= 2);
   assert.match(adminDesktop.text, /\$100\.00 allocation/);
-  assert.match(adminDesktop.text, /\$20\.00/);
+  assert.match(adminDesktop.text, /\$16\.67/);
   assert.match(adminDesktop.text, /Run hourly around the clock/);
   assert.match(adminDesktop.text, /Weekly progress/);
   assert.match(adminDesktop.text, /Scheduler/);

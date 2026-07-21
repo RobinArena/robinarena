@@ -11,6 +11,19 @@ written into the prompt. The final 10% of market dates form a chronological eval
 split. This setup limits look-ahead leakage, though it does not establish that the
 resulting policy will trade profitably.
 
+The dataset also contains retrospective review examples. Their input includes a
+prior decision, the later symbol return, and the position PnL per $1,000 held.
+Targets mark the decision right or wrong, review the inference, and record a
+concrete lesson. Correct policy decisions are paired with their outcomes. Clear
+losers also produce counterfactual bad buys, while clear winners produce
+counterfactual premature sells, so the model sees both verdicts.
+
+Review prompts are deliberately separate from live decision prompts. Outcome
+dates, future returns, and PnL appear only after the decision window has closed.
+The review target preserves factual distinctions: a trailing return can be
+reported correctly even when using it to predict continuation or reversal was
+wrong.
+
 ## Setup
 
 Tinker Cookbook currently requires Python 3.11 or newer.
@@ -25,8 +38,9 @@ cp config.example.json config.json
 ```
 
 Edit `config.json` to change symbols, dates, model, renderer, thresholds, or the
-training budget. The default model is the compact Tinker-supported
-`Qwen/Qwen3.5-4B`, paired with its non-thinking renderer.
+training budget. The default model is `thinkingmachines/Inkling`, paired with
+its recommended `tml_v0` renderer. The Inkling dependency extra installs
+`tml-renderers` and its compatible Torch version.
 
 ## Prepare the dataset
 
@@ -47,7 +61,8 @@ python train.py prepare --skip-download
 ```
 
 Inspect `data/processed/summary.json` and sample records before paying for a run.
-The examples include two portfolio states per shared market date: a cash portfolio
+The summary reports decision action counts and right/wrong review counts. Decision
+examples include two portfolio states per shared market date: a cash portfolio
 that can buy or hold, and a portfolio holding the weakest forward-return symbol
 that can sell or hold.
 

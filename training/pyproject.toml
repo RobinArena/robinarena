@@ -5,8 +5,8 @@ description = "Prepare historical market examples and LoRA fine-tune a RobinAren
 requires-python = ">=3.11"
 dependencies = [
   "numpy>=1.26,<3",
-  "tinker>=0.22.3,<0.24",
-  "tinker-cookbook @ git+https://github.com/thinking-machines-lab/tinker-cookbook.git@v0.5.2",
+  "tinker>=0.23,<0.24",
+  "tinker-cookbook[inkling] @ git+https://github.com/thinking-machines-lab/tinker-cookbook.git@v0.5.2",
   "yfinance>=0.2.66,<2",
 ]
 

@@ -21,6 +21,15 @@ SYSTEM_PROMPT = (
     "Keep rationale specific and under 280 characters. Do not invent news or unavailable data."
 )
 
+REVIEW_SYSTEM_PROMPT = (
+    "You review a completed RobinArena decision using the supplied subsequent return and PnL. "
+    "Return one compact JSON object with exactly verdict, outcome_summary, signal_review, and "
+    "lesson. Verdict must be right or wrong. Separate facts known at decision time from the "
+    "interpretation that predicted what would happen next. A losing outcome does not make an "
+    "accurately reported historical price or indicator false; it can make the inference drawn "
+    "from that fact wrong. Do not invent news, fills, or market data."
+)
+
 
 @dataclass(frozen=True)
 class Bar:
@@ -193,6 +202,138 @@ def decision(
     }
 
 
+def counterfactual_decision(
+    action: str, symbol: str, snapshot: dict[str, float]
+) -> dict[str, Any]:
+    momentum = snapshot["return_20d_pct"]
+    gap = snapshot["sma_20_gap_pct"]
+    if action == "buy":
+        rationale_text = (
+            f"{symbol}'s {momentum:.1f}% 20-day move and {gap:.1f}% average-price gap "
+            "support an immediate entry and should lead to higher prices."
+        )
+        allocation = 30.0
+    elif action == "sell":
+        rationale_text = (
+            f"{symbol}'s {momentum:.1f}% 20-day move and {gap:.1f}% average-price gap "
+            "look exhausted, so exit before a reversal."
+        )
+        allocation = 0.0
+    else:
+        raise ValueError("Counterfactual reviews support buy and sell actions")
+    return {
+        "action": action,
+        "symbol": symbol,
+        "confidence": 0.8,
+        "allocation_pct": allocation,
+        "rationale": rationale_text,
+    }
+
+
+def review_target(
+    verdict: str,
+    prior_decision: dict[str, Any],
+    forward_return: float,
+    snapshot: dict[str, float],
+) -> dict[str, Any]:
+    action = prior_decision["action"]
+    symbol = prior_decision["symbol"]
+    pnl = forward_return * 10
+    interpretation = (
+        "The direction implied by the decision matched the later move."
+        if verdict == "right"
+        else "The direction implied by the decision was contradicted by the later move."
+    )
+    if action == "hold":
+        interpretation = (
+            "Waiting was consistent with the configured entry or exit threshold."
+            if verdict == "right"
+            else "Waiting missed a move large enough to cross the configured action threshold."
+        )
+    lesson_by_action = {
+        "buy": (
+            "Keep the entry rule and size discipline."
+            if verdict == "right"
+            else (
+                "Trailing momentum or a reversal story alone was insufficient; require "
+                "stronger confirmation."
+            )
+        ),
+        "sell": (
+            "Keep the exit rule and reassess the remaining opportunity set."
+            if verdict == "right"
+            else (
+                "The mean-reversion exit thesis was premature; weigh trend persistence "
+                "before selling."
+            )
+        ),
+        "hold": (
+            "Keep using an explicit edge threshold before changing exposure."
+            if verdict == "right"
+            else (
+                "Recalibrate the action threshold when the available move is economically "
+                "meaningful."
+            )
+        ),
+    }
+    return {
+        "verdict": verdict,
+        "outcome_summary": (
+            f"{symbol} returned {forward_return:.2f}% over the review window, equal to "
+            f"${pnl:.2f} per $1,000 held. {interpretation}"
+        ),
+        "signal_review": (
+            f"The observed 20-day return of {snapshot['return_20d_pct']:.2f}% and "
+            f"20-day average gap of {snapshot['sma_20_gap_pct']:.2f}% were input facts. "
+            f"Their predictive interpretation was {verdict}."
+        ),
+        "lesson": lesson_by_action[action],
+    }
+
+
+def review_conversation(
+    prompt: dict[str, Any],
+    prior_decision: dict[str, Any],
+    forward_return: float,
+    snapshot: dict[str, float],
+    verdict: str,
+    as_of: date,
+    label_day: date,
+) -> dict[str, Any]:
+    feedback = {
+        "type": "decision_outcome",
+        "decision_as_of": as_of.isoformat(),
+        "outcome_as_of": label_day.isoformat(),
+        "market_context_at_decision": prompt,
+        "prior_decision": prior_decision,
+        "outcome": {
+            "symbol": prior_decision["symbol"],
+            "subsequent_return_pct": round_number(forward_return),
+            "position_pnl_if_held_usd_per_1000": round_number(forward_return * 10, 2),
+        },
+    }
+    target = review_target(verdict, prior_decision, forward_return, snapshot)
+    return {
+        "messages": [
+            {"role": "system", "content": REVIEW_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": json.dumps(feedback, separators=(",", ":"), sort_keys=True),
+            },
+            {
+                "role": "assistant",
+                "content": json.dumps(target, separators=(",", ":"), sort_keys=True),
+            },
+        ],
+        "metadata": {
+            "as_of": as_of.isoformat(),
+            "label_day": label_day.isoformat(),
+            "kind": "review",
+            "verdict": verdict,
+        },
+    }
+
+
 def build_examples(
     bars_by_symbol: dict[str, list[Bar]], config: DatasetConfig
 ) -> list[dict[str, Any]]:
@@ -222,6 +363,8 @@ def build_examples(
 
         best_symbol = max(config.symbols, key=forward_returns.__getitem__)
         best_return = forward_returns[best_symbol]
+        worst_symbol = min(config.symbols, key=forward_returns.__getitem__)
+        worst_return = forward_returns[worst_symbol]
         cash_action = "buy" if best_return >= config.buy_return_pct else "hold"
         cash_prompt = {
             "as_of": day.isoformat(),
@@ -232,9 +375,32 @@ def build_examples(
             cash_action, best_symbol, best_return, feature_map[best_symbol]
         )
         examples.append(conversation(cash_prompt, cash_target, day, future_day))
+        examples.append(
+            review_conversation(
+                cash_prompt,
+                cash_target,
+                best_return,
+                feature_map[best_symbol],
+                "right",
+                day,
+                future_day,
+            )
+        )
 
-        worst_symbol = min(config.symbols, key=forward_returns.__getitem__)
-        worst_return = forward_returns[worst_symbol]
+        if forward_returns[worst_symbol] <= config.sell_return_pct:
+            bad_buy = counterfactual_decision("buy", worst_symbol, feature_map[worst_symbol])
+            examples.append(
+                review_conversation(
+                    cash_prompt,
+                    bad_buy,
+                    forward_returns[worst_symbol],
+                    feature_map[worst_symbol],
+                    "wrong",
+                    day,
+                    future_day,
+                )
+            )
+
         held_action = "sell" if worst_return <= config.sell_return_pct else "hold"
         held_prompt = {
             "as_of": day.isoformat(),
@@ -248,6 +414,39 @@ def build_examples(
             held_action, worst_symbol, worst_return, feature_map[worst_symbol]
         )
         examples.append(conversation(held_prompt, held_target, day, future_day))
+        examples.append(
+            review_conversation(
+                held_prompt,
+                held_target,
+                worst_return,
+                feature_map[worst_symbol],
+                "right",
+                day,
+                future_day,
+            )
+        )
+
+        if forward_returns[best_symbol] >= config.buy_return_pct:
+            bad_sell = counterfactual_decision("sell", best_symbol, feature_map[best_symbol])
+            bad_sell_prompt = {
+                "as_of": day.isoformat(),
+                "portfolio": {
+                    "cash_pct": 60,
+                    "positions": [{"symbol": best_symbol, "allocation_pct": 40}],
+                },
+                "market": market,
+            }
+            examples.append(
+                review_conversation(
+                    bad_sell_prompt,
+                    bad_sell,
+                    forward_returns[best_symbol],
+                    feature_map[best_symbol],
+                    "wrong",
+                    day,
+                    future_day,
+                )
+            )
     return examples
 
 
@@ -263,7 +462,11 @@ def conversation(
                 "content": json.dumps(target, separators=(",", ":"), sort_keys=True),
             },
         ],
-        "metadata": {"as_of": as_of.isoformat(), "label_day": label_day.isoformat()},
+        "metadata": {
+            "as_of": as_of.isoformat(),
+            "label_day": label_day.isoformat(),
+            "kind": "decision",
+        },
     }
 
 
@@ -296,8 +499,18 @@ def dataset_summary(train: list[dict[str, Any]], evaluate: list[dict[str, Any]])
     def actions(rows: list[dict[str, Any]]) -> dict[str, int]:
         counts = {"buy": 0, "sell": 0, "hold": 0}
         for row in rows:
+            if row["metadata"]["kind"] != "decision":
+                continue
             target = json.loads(row["messages"][-1]["content"])
             counts[target["action"]] += 1
+        return counts
+
+    def verdicts(rows: list[dict[str, Any]]) -> dict[str, int]:
+        counts = {"right": 0, "wrong": 0}
+        for row in rows:
+            verdict = row["metadata"].get("verdict")
+            if verdict in counts:
+                counts[verdict] += 1
         return counts
 
     return {
@@ -306,6 +519,8 @@ def dataset_summary(train: list[dict[str, Any]], evaluate: list[dict[str, Any]])
         "eval_examples": len(evaluate),
         "train_actions": actions(train),
         "eval_actions": actions(evaluate),
+        "train_review_verdicts": verdicts(train),
+        "eval_review_verdicts": verdicts(evaluate),
         "last_train_day": max(row["metadata"]["as_of"] for row in train),
         "first_eval_day": min(row["metadata"]["as_of"] for row in evaluate),
     }

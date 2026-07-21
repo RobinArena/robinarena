@@ -357,6 +357,16 @@ a {
   background: var(--color-accent-hover);
 }
 
+.button-discord {
+  background: #5865f2;
+  color: #fff;
+}
+
+.button-discord:hover {
+  background: #4752c4;
+  color: #fff;
+}
+
 .button-quiet {
   border-color: var(--color-line-strong);
   background: var(--color-surface);
@@ -376,45 +386,6 @@ a {
   justify-content: center;
   padding-left: clamp(2rem, 4vw, 4rem);
   border-left: 1px solid var(--color-line-strong);
-}
-
-.community-invite {
-  display: flex;
-  min-height: 4.5rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-inline: 1rem;
-  border-block: 1px solid var(--color-line-strong);
-  color: var(--color-body-medium);
-}
-
-.community-invite > svg {
-  flex: 0 0 auto;
-  font-size: 1.35rem;
-}
-
-.community-invite a {
-  display: inline-flex;
-  min-height: 2.75rem;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--color-text);
-  font-size: 0.9rem;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.community-invite a:hover {
-  color: var(--color-accent);
-}
-
-.community-invite a svg {
-  transition: transform 150ms ease;
-}
-
-.community-invite a:hover svg {
-  transform: translate(0.12rem, -0.12rem);
 }
 
 .round-scoreboard-head {
@@ -2636,6 +2607,10 @@ a {
   }
 
   .hero-actions .button:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .hero-actions .button-discord {
     grid-column: 1 / -1;
   }
 

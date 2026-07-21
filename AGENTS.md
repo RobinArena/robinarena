@@ -3,8 +3,6 @@
 This is an nstack app: Encore.ts backend, Nuxt frontend, and Dokploy deployment
 through generated Docker Compose artifacts.
 
-Before changing code, read [NSTACK_GUIDELINES.md](./NSTACK_GUIDELINES.md).
-
 ## Project Map
 
 - `backend/`: Encore.ts services, APIs, resources, migrations, and secrets.

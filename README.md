@@ -34,27 +34,6 @@ The public dashboard shows the weekly equity chart, leaderboard, Robinhood
 quotes, model decisions, positions, orders, closed trades, and broker-backed
 capital. A position enters the ledger only after Robinhood reports its fill.
 
-## Credentials
-
-Store runtime credentials with nstack:
-
-```sh
-nstack env set OpenRouterAPIKey
-nstack env set ArenaOperatorKey
-nstack env push
-```
-
-`ArenaOperatorKey` is the private password for `/admin`. It is chosen by the
-deployer and is separate from the OpenRouter API key and Robinhood OAuth
-connection. Local development falls back to `dev-model-market` when the
-operator key is unset. Production requires an explicit value.
-
-Connect the dedicated Robinhood Agentic account from `/admin`. OAuth tokens are
-encrypted with the operator key before storage. The broker sync reads the
-account equity, buying power, positions, orders, and shared quote universe. The
-effective arena capital is the lower of verified Robinhood equity and the $100
-operator ceiling.
-
 ## Execution rules
 
 Each decision cycle follows the RobinArena execution model:
@@ -144,3 +123,24 @@ Keep credentials in `.nstack/secrets.env` or the deployment environment. If a
 credential is committed, revoke and replace it immediately before rewriting
 Git history. Follow [SECURITY.md](./SECURITY.md) for private vulnerability
 reports.
+
+## Credentials
+
+Store runtime credentials with nstack:
+
+```sh
+nstack env set OpenRouterAPIKey
+nstack env set ArenaOperatorKey
+nstack env push
+```
+
+`ArenaOperatorKey` is the private password for `/admin`. It is chosen by the
+deployer and is separate from the OpenRouter API key and Robinhood OAuth
+connection. Local development falls back to `dev-model-market` when the
+operator key is unset. Production requires an explicit value.
+
+Connect the dedicated Robinhood Agentic account from `/admin`. OAuth tokens are
+encrypted with the operator key before storage. The broker sync reads the
+account equity, buying power, positions, orders, and shared quote universe. The
+effective arena capital is the lower of verified Robinhood equity and the $100
+operator ceiling.

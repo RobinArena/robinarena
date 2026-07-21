@@ -1,7 +1,7 @@
 {
   "name": "RobinArena",
   "short_name": "RobinArena",
-  "description": "A live trading arena for four language models.",
+  "description": "A live trading arena for five language models.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0c0a",

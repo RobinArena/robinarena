@@ -1017,6 +1017,11 @@ async function reconcileArenaCapital(account: {
             updated_at = now()
           WHERE round_id = ${activeRound.id}
         `;
+        await tx.exec`
+          UPDATE arena_equity_snapshots SET
+            equity = equity + ${adjustment}
+          WHERE round_id = ${activeRound.id}
+        `;
       }
     }
     await tx.commit();

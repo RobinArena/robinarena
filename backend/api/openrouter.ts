@@ -7,6 +7,7 @@ export const OPENROUTER_MODELS = [
   { agent_id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", model: "deepseek/deepseek-v4-pro", structured_outputs: true },
   { agent_id: "claude-fable-5", name: "Claude Fable 5", model: "anthropic/claude-fable-5", structured_outputs: true },
   { agent_id: "grok-4-5", name: "Grok 4.5", model: "x-ai/grok-4.5", structured_outputs: true },
+  { agent_id: "gemini-3-6-flash", name: "Gemini 3.6 Flash", model: "google/gemini-3.6-flash", structured_outputs: true },
 ] as const;
 
 export interface OpenRouterMarketInput {

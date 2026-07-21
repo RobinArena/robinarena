@@ -177,6 +177,7 @@ async function auditAgentWorkspace() {
   assert.deepEqual(providerSources.sort(), [
     "/providers/claude.svg",
     "/providers/deepseek.png",
+    "/providers/google-gemini.svg",
     "/providers/openai.png",
     "/providers/xai.png",
   ]);
@@ -189,30 +190,31 @@ async function auditAgentWorkspace() {
 
   const portfolioLanes = page.locator(".portfolio-lane");
   const portfolioLaneCount = await portfolioLanes.count();
-  assert.equal(portfolioLaneCount, 4);
+  assert.equal(portfolioLaneCount, 5);
   const seriesControls = page.locator(".chart-series-controls button");
-  assert.equal(await seriesControls.count(), 5);
+  assert.equal(await seriesControls.count(), 6);
   await seriesControls.nth(2).click();
   assert.equal(await page.locator(".model-chart-line").count(), 1);
   assert.match(
     await page.locator(".chart-plot-stage > svg").getAttribute("aria-label"),
-    /Return history for/,
+    /Profit history for/,
   );
   await seriesControls.first().click();
-  assert.equal(await page.locator(".model-chart-line").count(), 4);
+  assert.equal(await page.locator(".model-chart-line").count(), 5);
   const axisLabels = await page.locator(".chart-axis-label:not(.chart-time-label)").allTextContents();
-  assert.ok(new Set(axisLabels).size > 1);
+  assert.equal(axisLabels.length, 5);
+  assert.equal(axisLabels.every((label) => /\$/.test(label)), true, "profit axis uses dollar values");
   const rangeControls = page.locator(".range-control button");
   for (const [index, range] of ["1D", "5D", "ALL"].entries()) {
     await rangeControls.nth(index).click();
     assert.equal(await rangeControls.nth(index).getAttribute("aria-pressed"), "true");
-    assert.equal(await page.locator(".model-chart-line").count(), 4);
+    assert.equal(await page.locator(".model-chart-line").count(), 5);
     assert.ok(new Set(await page.locator(".chart-time-label").allTextContents()).size > 0);
     assert.equal((await rangeControls.allTextContents())[index]?.trim(), range);
   }
 
   const roster = page.locator(".agent-roster-item");
-  assert.equal(await roster.count(), 4);
+  assert.equal(await roster.count(), 5);
   const target = roster.nth(1);
   const expectedName = (await target.locator("strong").first().innerText()).trim();
   await target.click();
@@ -279,8 +281,8 @@ try {
   assert.match(publicDesktop.text, /Frontier AI models compete in live trading on Robinhood/);
   assert.match(publicDesktop.text, /RobinArena/);
   assert.match(publicDesktop.text, /@RobinArenaFun/);
-  assert.match(publicDesktop.text, /\$25\.00/);
-  assert.equal(publicDesktop.leaderboardBalances.length, 4);
+  assert.match(publicDesktop.text, /\$20\.00/);
+  assert.equal(publicDesktop.leaderboardBalances.length, 5);
   assert.equal(
     publicDesktop.leaderboardBalances.every((balance) => /^\$[\d,]+\.\d{2}$/.test(balance.trim())),
     true,
@@ -289,7 +291,7 @@ try {
   assert.match(publicDesktop.text, /\$100\.00/);
   assert.match(publicDesktop.text, /\d+d \d+h left/);
   assert.match(publicDesktop.text, /Hourly, around the clock/);
-  assert.match(publicDesktop.text, /unchanged periods appear as gaps/i);
+  assert.match(publicDesktop.text, /deposits do not change the lines/i);
   assert.match(publicDesktop.text, /Disarmed/);
   assert.match(publicDesktop.text, /Robinhood/);
   assert.match(publicDesktop.text, /Read the latest model decisions/);
@@ -319,7 +321,7 @@ try {
   assert.equal(publicCompact.responsiveLayout.heroActionColumns, 1);
   assert.ok(publicTablet.responsiveLayout.headerCenterDelta <= 2);
   assert.match(adminDesktop.text, /\$100\.00 allocation/);
-  assert.match(adminDesktop.text, /\$25\.00/);
+  assert.match(adminDesktop.text, /\$20\.00/);
   assert.match(adminDesktop.text, /Run hourly around the clock/);
   assert.match(adminDesktop.text, /Weekly progress/);
   assert.match(adminDesktop.text, /Scheduler/);

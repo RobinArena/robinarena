@@ -3,17 +3,18 @@ import test from "node:test";
 import { equalCapitalReconciliation } from "./capital-reconciliation.ts";
 
 test("splits a capital deposit equally across every agent", () => {
-  const result = equalCapitalReconciliation(120, [
+  const result = equalCapitalReconciliation(150, [
     { initialBalance: 25, cashBalance: 20, equity: 27 },
     { initialBalance: 25, cashBalance: 25, equity: 25 },
     { initialBalance: 25, cashBalance: 18, equity: 23 },
+    { initialBalance: 25, cashBalance: 25, equity: 25 },
     { initialBalance: 25, cashBalance: 25, equity: 25 },
   ]);
 
   assert.deepEqual(result, {
     adjustmentPerAgent: 5,
-    currentCapital: 100,
-    difference: 20,
+    currentCapital: 125,
+    difference: 25,
   });
 });
 

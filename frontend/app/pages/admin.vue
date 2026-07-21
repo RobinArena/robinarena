@@ -269,7 +269,7 @@ onBeforeUnmount(pause);
       <header class="admin-header">
         <div>
           <h1>Operate RobinArena.</h1>
-          <p>Robinhood funds the four ledgers. Automatic decisions run hourly around the clock.</p>
+          <p>Robinhood funds {{ arena.models.length }} ledgers. Automatic decisions run hourly around the clock.</p>
         </div>
         <div class="admin-session">
           <span :class="{ 'is-live': arena.arena.live_armed, 'is-halted': arena.arena.halted }">
@@ -348,7 +348,7 @@ onBeforeUnmount(pause);
             <div class="admin-panel-heading">
               <div>
                 <h2>{{ formatCurrency(arena.arena.capital_limit) }} allocation</h2>
-                <p>The four weekly ledger baselines total {{ formatCurrency(arena.arena.starting_capital) }}. Current holdings carry into the next scoreboard.</p>
+                <p>The {{ arena.models.length }} weekly ledger baselines total {{ formatCurrency(arena.arena.starting_capital) }}. Current holdings carry into the next scoreboard.</p>
               </div>
               <strong>{{ formatCurrency(arena.arena.total_equity) }}</strong>
             </div>
@@ -398,7 +398,7 @@ onBeforeUnmount(pause);
               <div class="button-row">
                 <button class="button button-primary" type="button" :disabled="Boolean(pending) || executionPhrase !== status.execution_confirmation" @click="runRound">
                   <Icon :name="pending === 'round' ? 'ph:circle-notch' : 'ph:play-fill'" :class="{ 'is-spinning': pending === 'round' }" aria-hidden="true" />
-                  {{ pending === "round" ? "Running four models" : "Run decision cycle" }}
+                  {{ pending === "round" ? `Running ${arena.models.length} models` : "Run decision cycle" }}
                 </button>
                 <button class="button button-quiet" type="button" :disabled="Boolean(pending)" @click="disarmArena">Disarm</button>
               </div>

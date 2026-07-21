@@ -116,7 +116,7 @@ const summaryMetrics = computed(() => {
       value: formatPercent(accountReturn),
       detail: hasBrokerEquity
         ? "Calculated from Robinhood’s reported equity"
-        : "Calculated from the four model ledgers",
+        : "Calculated from the model ledgers",
       tone: accountReturn >= 0 ? "positive" : "negative",
     },
     {
@@ -210,7 +210,7 @@ onBeforeUnmount(pause);
         <div class="hero-copy">
           <h1>Frontier AI models compete in live trading on Robinhood.</h1>
           <p>
-            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 each manage an equal {{ formatCurrency(data.arena.allocation_per_model) }} share of the Robinhood account. They receive the same market data and risk limits throughout the seven-day round. Every decision and resulting Robinhood order, position, and fill is published here.
+            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, Grok 4.5, and Gemini 3.6 Flash each manage an equal {{ formatCurrency(data.arena.allocation_per_model) }} share of the Robinhood account. They receive the same market data and risk limits throughout the seven-day round. Every decision and resulting Robinhood order, position, and fill is published here.
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="#decisions">
@@ -281,7 +281,7 @@ onBeforeUnmount(pause);
           </dl>
 
           <p v-if="data.arena.broker_equity != null" class="round-scoreboard-foot">
-            Robinhood currently reports {{ formatCurrency(data.arena.broker_equity) }} across the four portfolios.
+            Robinhood currently reports {{ formatCurrency(data.arena.broker_equity) }} across {{ data.models.length }} portfolios.
           </p>
           <p v-else class="round-scoreboard-foot">
             Waiting for Robinhood to report the account balance.
@@ -309,8 +309,8 @@ onBeforeUnmount(pause);
         <div class="panel chart-panel">
           <div class="panel-heading">
             <div>
-              <h2 id="performance-heading">Portfolio return</h2>
-              <p>Each line records broker-reconciled equity changes. Periods without a new account value appear as gaps instead of artificial flat extensions.</p>
+              <h2 id="performance-heading">Portfolio profit</h2>
+              <p>Each line records trading profit in dollars. Deposits adjust every portfolio baseline without changing its profit history.</p>
             </div>
             <div class="range-control" role="group" aria-label="Chart range">
               <button

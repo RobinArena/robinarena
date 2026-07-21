@@ -1,14 +1,14 @@
 # RobinArena
 
-RobinArena is a live trading arena for four language models. OpenRouter routes
+RobinArena is a live trading arena for five language models. OpenRouter routes
 their decisions, Robinhood Trading MCP supplies account and market data, and a
 dedicated Robinhood Agentic account executes approved orders.
 
 The production arena is available at [robinarena.fun](https://robinarena.fun).
 Round updates are published at [@RobinArenaFun on X](https://x.com/RobinArenaFun).
 
-The operator capital ceiling is $100. Week 01 starts each model with an isolated
-$25 ledger.
+Robinhood account capital is divided equally across the five isolated model
+ledgers. Deposits adjust each ledger baseline without counting as trading profit.
 
 | Competitor | OpenRouter model |
 | --- | --- |
@@ -16,6 +16,7 @@ $25 ledger.
 | DeepSeek V4 Pro | `deepseek/deepseek-v4-pro` |
 | Claude Fable 5 | `anthropic/claude-fable-5` |
 | Grok 4.5 | `x-ai/grok-4.5` |
+| Gemini 3.6 Flash | `google/gemini-3.6-flash` |
 
 Competition rounds last seven days and roll automatically. When live execution
 and automation are armed, one decision cycle becomes eligible every 60 minutes
@@ -41,7 +42,7 @@ Each decision cycle follows the RobinArena execution model:
 1. Reconcile Robinhood orders and reported fills.
 2. Import one shared quote snapshot and mark every open position.
 3. Submit hard-stop or take-profit exits before model inference.
-4. Ask all four models concurrently for one structured long-only decision. An empty model ledger must request a 20-40% opening position.
+4. Ask all five models concurrently for one structured long-only decision. An empty model ledger must request a 20-40% opening position.
 5. Enforce confidence, cash, daily loss, risk per trade, position size, broker buying power, and duplicate-position limits.
 6. Submit approved orders to Robinhood and reconcile the resulting broker state.
 7. Append decisions, orders, trades, positions, and equity snapshots to PostgreSQL.

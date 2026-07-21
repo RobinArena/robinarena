@@ -39,9 +39,14 @@ cd training
 python3.12 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 python -m pip install -e '.[dev]'
 cp config.example.json config.json
 ```
+
+After setup, `train.py` detects `training/.venv` and relaunches itself with that
+Python automatically. Commands wrapped by `nstack env run` therefore work
+without manually activating the environment.
 
 Edit `config.json` to change symbols, dates, model, renderer, thresholds, or the
 training budget. The default model is `thinkingmachines/Inkling`, paired with

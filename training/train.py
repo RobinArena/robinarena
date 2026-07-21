@@ -34,6 +34,21 @@ PROCESSED_DIR = ROOT / "data" / "processed"
 PRODUCTION_OUTCOMES = ROOT / "data" / "production" / "decision-outcomes.csv"
 
 
+def relaunch_in_project_environment() -> None:
+    """Use the local training environment when the command starts with system Python."""
+    venv_python = ROOT / ".venv" / "bin" / "python"
+    if not venv_python.exists() or Path(sys.prefix) == ROOT / ".venv":
+        return
+    environment = os.environ.copy()
+    environment["VIRTUAL_ENV"] = str(ROOT / ".venv")
+    environment["PATH"] = f"{venv_python.parent}{os.pathsep}{environment.get('PATH', '')}"
+    os.execve(
+        str(venv_python),
+        [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]],
+        environment,
+    )
+
+
 class Console:
     COLORS = {
         "cyan": "\033[36m",
@@ -396,6 +411,7 @@ def arguments() -> argparse.Namespace:
 
 
 def main() -> None:
+    relaunch_in_project_environment()
     args = arguments()
     console = Console(disabled=args.no_color)
     try:

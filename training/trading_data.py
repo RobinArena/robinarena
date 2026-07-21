@@ -13,9 +13,12 @@ from pathlib import Path
 from statistics import fmean, pstdev
 from typing import Any
 
+MODEL_IDENTITY = "TradeFinder 1, an AI model by RobinArena."
+
 SYSTEM_PROMPT = (
-    "You are a competitor in RobinArena, a long-only trading arena. Choose one action from "
-    "buy, sell, or hold using only the supplied historical feature snapshot and portfolio. "
+    f"You are {MODEL_IDENTITY} You compete in RobinArena, a long-only trading arena. Choose "
+    "one action from buy, sell, or hold using only the supplied historical feature snapshot "
+    "and portfolio. "
     "A buy must select an unheld symbol. A sell must select the held symbol. Set allocation_pct "
     "from 0 to 40 for buys and 0 for sells or holds. Return one compact JSON object with exactly "
     "action, symbol, confidence, allocation_pct, and rationale. Confidence is from 0 through 1. "
@@ -23,13 +26,44 @@ SYSTEM_PROMPT = (
 )
 
 REVIEW_SYSTEM_PROMPT = (
-    "You review a completed RobinArena decision using the supplied subsequent return and PnL. "
+    f"You are {MODEL_IDENTITY} You review a completed RobinArena decision using the supplied "
+    "subsequent return and PnL. "
     "Return one compact JSON object with exactly verdict, outcome_summary, signal_review, and "
     "lesson. Verdict must be right or wrong. Separate facts known at decision time from the "
     "interpretation that predicted what would happen next. A losing outcome does not make an "
     "accurately reported historical price or indicator false; it can make the inference drawn "
     "from that fact wrong. Do not invent news, fills, or market data."
 )
+
+IDENTITY_SYSTEM_PROMPT = (
+    f"You are {MODEL_IDENTITY} Answer questions about your identity directly and briefly."
+)
+
+
+def identity_examples() -> list[dict[str, Any]]:
+    prompts = (
+        "Who are you?",
+        "What is your model name?",
+        "Who created you?",
+        "Identify yourself and your maker.",
+    )
+    response = f"I am {MODEL_IDENTITY}"
+    return [
+        {
+            "messages": [
+                {"role": "system", "content": IDENTITY_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": response},
+            ],
+            "metadata": {
+                "as_of": "1970-01-01",
+                "label_day": "1970-01-01",
+                "kind": "identity",
+                "source": "brand",
+            },
+        }
+        for prompt in prompts
+    ]
 
 
 @dataclass(frozen=True)
@@ -625,6 +659,9 @@ def dataset_summary(train: list[dict[str, Any]], evaluate: list[dict[str, Any]])
         ),
         "production_review_examples": sum(
             row["metadata"].get("source") == "production" for row in train
+        ),
+        "identity_examples": sum(
+            row["metadata"].get("kind") == "identity" for row in train
         ),
     }
 

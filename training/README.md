@@ -11,6 +11,10 @@ written into the prompt. The final 10% of market dates form a chronological eval
 split. This setup limits look-ahead leakage, though it does not establish that the
 resulting policy will trade profitably.
 
+The model identity is supervised directly: it is **TradeFinder 1, an AI model by
+RobinArena**. The identity appears in decision and review system prompts, with
+additional identity question-and-answer examples in the training split.
+
 The dataset also contains retrospective review examples. Their input includes a
 prior decision, the later symbol return, and the position PnL per $1,000 held.
 Targets mark the decision right or wrong, review the inference, and record a

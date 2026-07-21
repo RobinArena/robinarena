@@ -20,6 +20,7 @@ from trading_data import (
     chronological_split,
     dataset_summary,
     download_bars,
+    identity_examples,
     load_production_reviews,
     parse_date,
     read_cached_bars,
@@ -192,6 +193,7 @@ def show_summary(summary: dict[str, Any], console: Console) -> None:
     console.value("Training examples", f"{summary['train_examples']:,}", color="green")
     console.value("Evaluation examples", f"{summary['eval_examples']:,}")
     console.value("Production outcomes", summary.get("production_review_examples", 0))
+    console.value("Identity examples", summary.get("identity_examples", 0))
     console.value("Latest market label", summary.get("last_market_label_day", "unknown"))
     console.value("Latest production label", summary.get("last_production_label_day", "none"))
     console.value("Eval starts", summary["first_eval_day"])
@@ -231,6 +233,7 @@ def prepare(
         load_production_reviews(PRODUCTION_OUTCOMES) if PRODUCTION_OUTCOMES.exists() else []
     )
     train_rows.extend(production_rows)
+    train_rows.extend(identity_examples())
     write_jsonl(PROCESSED_DIR / "train.jsonl", train_rows)
     write_jsonl(PROCESSED_DIR / "eval.jsonl", eval_rows)
     summary = dataset_summary(train_rows, eval_rows)

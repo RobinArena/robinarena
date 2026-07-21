@@ -8,6 +8,7 @@ from trading_data import (
     build_examples,
     chronological_split,
     features,
+    identity_examples,
     load_production_reviews,
 )
 from train import estimate_cost, planned_rows
@@ -103,3 +104,14 @@ def test_training_plan_and_cost_respect_max_steps() -> None:
     assert len(batches) == 2
     assert sum(map(len, batches)) == 8
     assert estimate_cost(2_000_000, {"train_price_per_million_tokens": 5.61}) == 11.22
+
+
+def test_identity_examples_name_tradefinder_and_robinarena() -> None:
+    examples = identity_examples()
+    assert len(examples) == 4
+    assert all(row["metadata"]["kind"] == "identity" for row in examples)
+    assert all(
+        row["messages"][-1]["content"]
+        == "I am TradeFinder 1, an AI model by RobinArena."
+        for row in examples
+    )

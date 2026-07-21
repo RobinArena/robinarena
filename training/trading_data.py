@@ -6,11 +6,12 @@ import csv
 import json
 import math
 import random
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from statistics import fmean, pstdev
-from typing import Any, Iterable
+from typing import Any
 
 SYSTEM_PROMPT = (
     "You are a competitor in RobinArena, a long-only trading arena. Choose one action from "
@@ -334,6 +335,102 @@ def review_conversation(
     }
 
 
+def load_production_reviews(path: Path) -> list[dict[str, Any]]:
+    """Convert closed production trades into decision-outcome review conversations."""
+    if not path.exists():
+        raise FileNotFoundError(f"Missing production outcome export: {path}")
+
+    examples: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    with path.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            decision_id = row.get("decision_id", "").strip()
+            if not decision_id or decision_id in seen:
+                continue
+            seen.add(decision_id)
+            action = (row.get("action") or row.get("requested_action") or "hold").lower()
+            symbol = (row.get("symbol") or "UNKNOWN").upper()
+            realized_pnl = float(row.get("realized_pnl") or 0)
+            return_pct = float(row.get("return_pct") or 0)
+            verdict = "right" if realized_pnl > 0 else "wrong"
+            rationale_text = row.get("rationale") or "No rationale was recorded."
+            prior_decision = {
+                "action": action,
+                "symbol": symbol,
+                "confidence": float(row.get("confidence") or 0),
+                "allocation_pct": float(row.get("requested_allocation_pct") or 0),
+                "rationale": rationale_text,
+            }
+            feedback = {
+                "type": "production_decision_outcome",
+                "decision_id": decision_id,
+                "decision_context": {
+                    "agent_id": row.get("agent_id"),
+                    "strategy": row.get("strategy"),
+                    "thesis": row.get("thesis"),
+                    "provider_model": row.get("provider_model"),
+                    "risk_note": row.get("risk_note"),
+                },
+                "prior_decision": prior_decision,
+                "outcome": {
+                    "trade_id": row.get("trade_id"),
+                    "opened_at": row.get("opened_at"),
+                    "closed_at": row.get("closed_at"),
+                    "entry_price": float(row.get("entry_price") or 0),
+                    "exit_price": float(row.get("exit_price") or 0),
+                    "realized_pnl_usd": realized_pnl,
+                    "return_pct": return_pct,
+                    "exit_reason": row.get("exit_reason"),
+                },
+            }
+            result_text = "earned" if realized_pnl > 0 else "lost"
+            target = {
+                "verdict": verdict,
+                "outcome_summary": (
+                    f"The {action} decision on {symbol} {result_text} ${abs(realized_pnl):.2f} "
+                    f"with a {return_pct:.2f}% realized return."
+                ),
+                "signal_review": (
+                    f"The recorded rationale was available at decision time: {rationale_text} "
+                    f"The realized PnL shows that its directional interpretation was {verdict}."
+                ),
+                "lesson": (
+                    "Retain the useful signal and sizing discipline from this profitable decision."
+                    if verdict == "right"
+                    else (
+                        "Treat the recorded inputs as historical facts and revise the inference or "
+                        "risk rule that turned them into this losing decision."
+                    )
+                ),
+            }
+            decision_at = (row.get("decision_at") or row.get("opened_at") or "")[:10]
+            closed_at = (row.get("closed_at") or decision_at)[:10]
+            examples.append(
+                {
+                    "messages": [
+                        {"role": "system", "content": REVIEW_SYSTEM_PROMPT},
+                        {
+                            "role": "user",
+                            "content": json.dumps(feedback, separators=(",", ":"), sort_keys=True),
+                        },
+                        {
+                            "role": "assistant",
+                            "content": json.dumps(target, separators=(",", ":"), sort_keys=True),
+                        },
+                    ],
+                    "metadata": {
+                        "as_of": decision_at,
+                        "label_day": closed_at,
+                        "kind": "review",
+                        "source": "production",
+                        "decision_id": decision_id,
+                        "verdict": verdict,
+                    },
+                }
+            )
+    return examples
+
+
 def build_examples(
     bars_by_symbol: dict[str, list[Bar]], config: DatasetConfig
 ) -> list[dict[str, Any]]:
@@ -514,7 +611,7 @@ def dataset_summary(train: list[dict[str, Any]], evaluate: list[dict[str, Any]])
         return counts
 
     return {
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "train_examples": len(train),
         "eval_examples": len(evaluate),
         "train_actions": actions(train),
@@ -523,6 +620,12 @@ def dataset_summary(train: list[dict[str, Any]], evaluate: list[dict[str, Any]])
         "eval_review_verdicts": verdicts(evaluate),
         "last_train_day": max(row["metadata"]["as_of"] for row in train),
         "first_eval_day": min(row["metadata"]["as_of"] for row in evaluate),
+        "last_label_day": max(
+            row["metadata"]["label_day"] for row in [*train, *evaluate]
+        ),
+        "production_review_examples": sum(
+            row["metadata"].get("source") == "production" for row in train
+        ),
     }
 
 

@@ -18,6 +18,12 @@ concrete lesson. Correct policy decisions are paired with their outcomes. Clear
 losers also produce counterfactual bad buys, while clear winners produce
 counterfactual premature sells, so the model sees both verdicts.
 
+Closed production trades add a second review source. The CLI exports the latest
+decision and realized-PnL pairs from the Dokploy PostgreSQL container over SSH,
+then converts them into review conversations. These examples preserve the
+recorded strategy, thesis, rationale, risk note, model, fill prices, return, and
+realized PnL. Production CSV files remain local and are ignored by Git.
+
 Review prompts are deliberately separate from live decision prompts. Outcome
 dates, future returns, and PnL appear only after the decision window has closed.
 The review target preserves factual distinctions: a trailing return can be
@@ -49,8 +55,9 @@ python train.py prepare
 ```
 
 This requests adjustment-aware daily history through yfinance's Yahoo Finance
-adapter and caches normalized files in `data/raw`. Generated conversations and a
-class/split summary go to `data/processed`. These directories are ignored by Git.
+adapter, exports current closed production outcomes, and caches both sources.
+Generated conversations and a class/split summary go to `data/processed`. These
+directories are ignored by Git.
 Yahoo data access is suitable for research prototyping; review its terms before
 redistributing or using the data commercially.
 
@@ -58,6 +65,14 @@ To rebuild examples from the cached CSV files without network access:
 
 ```sh
 python train.py prepare --skip-download
+```
+
+Use `--skip-production-sync` only when SSH is unavailable and a cached production
+export already exists. Check freshness, source coverage, date bounds, action
+counts, and review verdicts at any time:
+
+```sh
+python train.py inspect
 ```
 
 Inspect `data/processed/summary.json` and sample records before paying for a run.
@@ -72,18 +87,28 @@ Create an API key in the Tinker Console, then run:
 
 ```sh
 export TINKER_API_KEY='replace-me'
+python train.py train --dry-run
 python train.py train
 ```
 
-For a low-cost smoke test, set `max_steps` to `2` in `config.json`. The script
-creates a LoRA training client, renders each conversation with the model-specific
-chat template, trains only on the last assistant response with cross-entropy,
-applies Adam updates, and saves resumable state plus sampler weights. Copy the
-printed `tinker://` paths into your experiment record.
+`train` refreshes market data and production outcomes before it renders the
+training plan. It prints the exact rendered token count and an estimated cost,
+then asks for confirmation before creating a paid Tinker client. `--dry-run`
+stops after this preflight. In automation, pass `--yes` to confirm the paid run.
+Use `--use-existing-data` only to train an already inspected processed dataset.
 
-`python train.py all` prepares fresh data and starts training in one command.
-Training is a paid remote operation and the script refuses to start it without
-`TINKER_API_KEY`.
+The checked Inkling training rate is configured as `$5.61` per million tokens,
+based on Tinker's published price on 2026-07-22. The estimate covers training
+tokens and excludes sampling, storage, taxes, and later price changes. Update the
+rate and `pricing_checked_at` in `config.json` when Tinker changes its pricing.
+
+For a low-cost smoke test, set `max_steps` to `2` in `config.json`. The script
+trains only on the last assistant response with cross-entropy, applies Adam
+updates, and saves resumable state plus sampler weights. Copy the printed
+`tinker://` paths into your experiment record.
+
+`python train.py all` remains an alias for a fresh prepare followed by training.
+Training is a paid remote operation and requires `TINKER_API_KEY`.
 
 ## Validate local code
 

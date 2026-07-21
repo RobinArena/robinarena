@@ -16,5 +16,14 @@
   "max_length": 4096,
   "seed": 17,
   "checkpoint_every": 100,
-  "max_steps": null
+  "max_steps": null,
+  "train_price_per_million_tokens": 5.61,
+  "pricing_checked_at": "2026-07-22",
+  "pricing_url": "https://tinker-docs.thinkingmachines.ai/tinker/models/",
+  "production_data": {
+    "ssh_host": "root@dokploy.nik.technology",
+    "container_name": "robinshark-postgres",
+    "database_user": "nstack",
+    "database_name": "app"
+  }
 }

@@ -8,6 +8,8 @@ coverage
 .vite
 .cache
 .data
+training/data/production/*.csv
+training/data/production/*.tmp
 
 .nstack
 .env

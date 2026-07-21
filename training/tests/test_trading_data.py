@@ -2,7 +2,15 @@ import json
 from datetime import date, timedelta
 from pathlib import Path
 
-from trading_data import Bar, DatasetConfig, build_examples, chronological_split, features
+from trading_data import (
+    Bar,
+    DatasetConfig,
+    build_examples,
+    chronological_split,
+    features,
+    load_production_reviews,
+)
+from train import estimate_cost, planned_rows
 
 
 def test_default_config_uses_inkling_renderer() -> None:
@@ -67,3 +75,31 @@ def test_examples_hide_forward_prices_and_split_chronologically() -> None:
             assert "prior_decision" in feedback
             assert "subsequent_return_pct" in feedback["outcome"]
             assert "position_pnl_if_held_usd_per_1000" in feedback["outcome"]
+
+
+def test_production_outcomes_become_review_examples(tmp_path: Path) -> None:
+    path = tmp_path / "outcomes.csv"
+    path.write_text(
+        "decision_id,decision_at,agent_id,strategy,thesis,symbol,requested_action,action,"
+        "confidence,requested_allocation_pct,rationale,approved,risk_note,provider_model,"
+        "trade_id,opened_at,closed_at,entry_price,exit_price,realized_pnl,return_pct,exit_reason\n"
+        "d1,2026-07-01T12:00:00Z,a1,momentum,trend,SPY,buy,buy,0.8,20,price rose,"
+        "true,within limits,model,t1,2026-07-01,2026-07-03,100,103,30,3,target\n"
+        "d2,2026-07-02T12:00:00Z,a1,momentum,trend,NVDA,buy,buy,0.7,20,volume rose,"
+        "true,within limits,model,t2,2026-07-02,2026-07-04,100,98,-20,-2,stop\n",
+        encoding="utf-8",
+    )
+    examples = load_production_reviews(path)
+    assert [row["metadata"]["verdict"] for row in examples] == ["right", "wrong"]
+    assert all(row["metadata"]["source"] == "production" for row in examples)
+    feedback = json.loads(examples[1]["messages"][1]["content"])
+    assert feedback["outcome"]["realized_pnl_usd"] == -20
+
+
+def test_training_plan_and_cost_respect_max_steps() -> None:
+    rows = [{"id": value} for value in range(9)]
+    config = {"batch_size": 4, "epochs": 3, "max_steps": 2, "seed": 17}
+    batches = planned_rows(rows, config)
+    assert len(batches) == 2
+    assert sum(map(len, batches)) == 8
+    assert estimate_cost(2_000_000, {"train_price_per_million_tokens": 5.61}) == 11.22

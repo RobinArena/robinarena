@@ -1,5 +1,5 @@
 export const COMPETITION_ROUND_DAYS = 7;
-export const DECISION_CYCLE_MINUTES = 60;
+export const DECISION_CYCLE_MINUTES = 30;
 export const SCHEDULED_CYCLE_GRACE_MINUTES = 15;
 export type ArenaTradingSession =
   | "regular_hours"
@@ -32,7 +32,7 @@ const REGULAR_MARKET_CLOSE_MINUTES = 16 * 60;
 const EXTENDED_MARKET_CLOSE_MINUTES = 20 * 60;
 const EARLY_REGULAR_MARKET_CLOSE_MINUTES = 13 * 60;
 const EARLY_EXTENDED_MARKET_CLOSE_MINUTES = 17 * 60;
-const DECISION_MINUTE = 35;
+const DECISION_MINUTE = 5;
 
 function marketClockParts(at: Date): MarketClockParts | undefined {
   const parts = Object.fromEntries(

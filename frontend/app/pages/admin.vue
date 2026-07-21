@@ -269,7 +269,7 @@ onBeforeUnmount(pause);
       <header class="admin-header">
         <div>
           <h1>Operate RobinArena.</h1>
-          <p>Robinhood funds {{ arena.models.length }} ledgers. Automatic decisions run hourly around the clock.</p>
+          <p>Robinhood funds {{ arena.models.length }} ledgers. Automatic decisions run every 30 minutes around the clock.</p>
         </div>
         <div class="admin-session">
           <span :class="{ 'is-live': arena.arena.live_armed, 'is-halted': arena.arena.halted }">
@@ -376,7 +376,7 @@ onBeforeUnmount(pause);
             <div v-if="!arena.arena.live_armed" class="confirmation-control">
               <label class="automation-option">
                 <input v-model="automationEnabled" type="checkbox">
-                <span><strong>Run hourly around the clock</strong><small>Fixed slots run at :35 every hour. Manual cycles leave the automatic schedule unchanged.</small></span>
+                <span><strong>Run every 30 minutes</strong><small>Fixed slots run at :05 and :35 every hour. Manual cycles leave the automatic schedule unchanged.</small></span>
               </label>
               <label>
                 <span>Type to arm live trading</span>

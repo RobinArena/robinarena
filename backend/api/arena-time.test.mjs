@@ -52,26 +52,26 @@ test("early-close days retain Robinhood's shortened extended session", () => {
   );
 });
 
-test("automatic cycles use fixed hourly slots around the clock", () => {
+test("automatic cycles use fixed half-hour slots around the clock", () => {
   assert.equal(
     nextDecisionCycleAt(new Date("2026-07-18T00:46:00Z")).toISOString(),
-    "2026-07-18T01:35:00.000Z",
+    "2026-07-18T01:05:00.000Z",
   );
   assert.equal(
     nextDecisionCycleAt(new Date("2026-07-20T13:36:00Z")).toISOString(),
-    "2026-07-20T14:35:00.000Z",
+    "2026-07-20T14:05:00.000Z",
   );
   assert.equal(
     nextDecisionCycleAt(new Date("2026-07-17T20:00:00Z")).toISOString(),
-    "2026-07-17T20:35:00.000Z",
+    "2026-07-17T20:05:00.000Z",
   );
   assert.equal(
     nextDecisionCycleAt(new Date("2026-07-17T23:36:00Z")).toISOString(),
-    "2026-07-18T00:35:00.000Z",
+    "2026-07-18T00:05:00.000Z",
   );
   assert.equal(
     nextDecisionCycleAt(new Date("2026-11-27T17:36:00Z")).toISOString(),
-    "2026-11-27T18:35:00.000Z",
+    "2026-11-27T18:05:00.000Z",
   );
   assert.equal(SCHEDULED_CYCLE_GRACE_MINUTES, 15);
 });

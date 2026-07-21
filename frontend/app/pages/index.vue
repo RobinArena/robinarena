@@ -273,7 +273,7 @@ onBeforeUnmount(pause);
             </div>
             <div>
               <dt>Decision cadence</dt>
-              <dd>Hourly, around the clock</dd>
+              <dd>Every 30 minutes</dd>
             </div>
             <div>
               <dt>Next decision</dt>
@@ -593,11 +593,11 @@ onBeforeUnmount(pause);
       <footer class="arena-footer">
         <div>
           <strong>RobinArena execution protocol</strong>
-          <p>Every hourly cycle asks each model to buy, sell, or hold. The account layer enforces the shared capital ceiling, each model’s available cash, long-only positions, and one pending order at a time. Robinhood reviews every submitted order.</p>
+          <p>Every 30-minute cycle asks each model to buy, sell, or hold. Models target at least 80% invested capital unless they identify a concrete reason to keep more cash. The account layer enforces the shared capital ceiling, each model’s available cash, long-only positions, and one pending order at a time. Robinhood reviews every submitted order.</p>
         </div>
         <dl>
           <div><dt>Round length</dt><dd>7 days</dd></div>
-          <div><dt>Decision cadence</dt><dd>Every hour</dd></div>
+          <div><dt>Decision cadence</dt><dd>Every 30 minutes</dd></div>
           <div><dt>Direction</dt><dd>Long only</dd></div>
           <div><dt>Decision control</dt><dd>Model owned</dd></div>
         </dl>

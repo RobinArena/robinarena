@@ -6,7 +6,7 @@ import csv
 import json
 import math
 import random
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -94,7 +94,11 @@ def parse_date(value: str | None, *, default: date) -> date:
 
 
 def download_bars(
-    symbols: Iterable[str], start: date, end: date, raw_dir: Path
+    symbols: Iterable[str],
+    start: date,
+    end: date,
+    raw_dir: Path,
+    progress: Callable[[int, int, str], None] | None = None,
 ) -> dict[str, list[Bar]]:
     """Download daily OHLCV data with yfinance and cache normalized CSV files."""
     try:
@@ -103,8 +107,9 @@ def download_bars(
         raise RuntimeError("Install the training dependencies before downloading data") from exc
 
     raw_dir.mkdir(parents=True, exist_ok=True)
+    requested_symbols = tuple(symbols)
     result: dict[str, list[Bar]] = {}
-    for original_symbol in symbols:
+    for position, original_symbol in enumerate(requested_symbols, start=1):
         symbol = original_symbol.strip().upper()
         cache_path = raw_dir / f"{symbol}.csv"
         frame = yf.Ticker(symbol).history(
@@ -135,7 +140,11 @@ def download_bars(
             raise RuntimeError(f"Insufficient valid market data returned for {symbol}")
         write_bars(cache_path, bars)
         result[symbol] = bars
-        print(f"Downloaded {symbol}: {len(bars)} daily bars")
+        detail = f"{symbol}  {len(bars):,} bars"
+        if progress:
+            progress(position, len(requested_symbols), detail)
+        else:
+            print(f"Downloaded {detail}")
     return result
 
 
@@ -466,7 +475,9 @@ def load_production_reviews(path: Path) -> list[dict[str, Any]]:
 
 
 def build_examples(
-    bars_by_symbol: dict[str, list[Bar]], config: DatasetConfig
+    bars_by_symbol: dict[str, list[Bar]],
+    config: DatasetConfig,
+    progress: Callable[[int, int, str], None] | None = None,
 ) -> list[dict[str, Any]]:
     """Create examples on common dates. Future prices are used for targets and never prompts."""
     indexed = {symbol: {bar.day: bar for bar in bars} for symbol, bars in bars_by_symbol.items()}
@@ -476,7 +487,9 @@ def build_examples(
         raise ValueError("Not enough common trading days for the configured lookback and horizon")
 
     examples: list[dict[str, Any]] = []
-    for index in range(required_history - 1, len(common_days) - config.forward_days):
+    indexes = range(required_history - 1, len(common_days) - config.forward_days)
+    total_days = len(indexes)
+    for completed_days, index in enumerate(indexes, start=1):
         day = common_days[index]
         history_days = common_days[index - config.lookback_days : index + 1]
         future_day = common_days[index + config.forward_days]
@@ -577,6 +590,12 @@ def build_examples(
                     day,
                     future_day,
                 )
+            )
+        if progress:
+            progress(
+                completed_days,
+                total_days,
+                f"{day.isoformat()}  {len(examples):,} examples",
             )
     return examples
 

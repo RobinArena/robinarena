@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from dataclasses import fields
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -64,6 +65,13 @@ class Console:
 
     def __init__(self, *, disabled: bool = False) -> None:
         self.enabled = sys.stdout.isatty() and not disabled and "NO_COLOR" not in os.environ
+        self.progress_active = False
+        self.progress_buckets: dict[str, int] = {}
+
+    def break_progress(self) -> None:
+        if self.progress_active:
+            print()
+            self.progress_active = False
 
     def paint(self, value: object, color: str) -> str:
         text = str(value)
@@ -72,13 +80,53 @@ class Console:
         return f"{self.COLORS[color]}{text}{self.COLORS['reset']}"
 
     def title(self, text: str) -> None:
+        self.break_progress()
         print(f"\n{self.paint(text, 'bold')}")
 
     def status(self, label: str, text: str, color: str = "cyan") -> None:
+        self.break_progress()
         print(f"{self.paint(label.ljust(12), color)} {text}")
 
     def value(self, label: str, value: object, *, color: str = "cyan") -> None:
+        self.break_progress()
         print(f"  {self.paint(label.ljust(25), 'dim')} {self.paint(value, color)}")
+
+    def progress(
+        self,
+        label: str,
+        current: int,
+        total: int,
+        started_at: float,
+        detail: str = "",
+        color: str = "cyan",
+    ) -> None:
+        elapsed = max(time.monotonic() - started_at, 0.001)
+        fraction = min(1.0, current / total) if total else 1.0
+        bucket = int(fraction * 20)
+        if not self.enabled and current != total and self.progress_buckets.get(label) == bucket:
+            return
+        self.progress_buckets[label] = bucket
+        rate = current / elapsed
+        eta = (total - current) / rate if rate else 0
+        bar_width = 20
+        filled = round(fraction * bar_width)
+        bar = f"[{'#' * filled}{'-' * (bar_width - filled)}]"
+        timing = f"{elapsed:,.1f}s elapsed  {rate:,.1f}/s"
+        if current < total:
+            timing += f"  {eta:,.1f}s ETA"
+        line = (
+            f"{self.paint(label.ljust(12), color)} {bar} {fraction:6.1%}  "
+            f"{current:,}/{total:,}  {timing}"
+        )
+        if detail:
+            line += f"  {detail}"
+        if self.enabled:
+            print(f"\r{line}\033[K", end="", flush=True)
+            self.progress_active = current < total
+            if current == total:
+                print()
+        else:
+            print(line)
 
 
 def load_config(path: Path, console: Console) -> dict[str, Any]:
@@ -217,23 +265,42 @@ def prepare(
     console.title("Refresh training dataset")
     console.status("MARKET", f"{len(config.symbols)} symbols through {config.end.isoformat()}")
     raw_dir = ROOT / "data" / "raw"
-    bars = (
-        read_cached_bars(config.symbols, raw_dir)
-        if skip_download
-        else download_bars(config.symbols, config.start, config.end, raw_dir)
-    )
+    market_started = time.monotonic()
+    if skip_download:
+        bars = read_cached_bars(config.symbols, raw_dir)
+        console.status("MARKET", f"Loaded {len(bars)} symbols from cache", "green")
+    else:
+        bars = download_bars(
+            config.symbols,
+            config.start,
+            config.end,
+            raw_dir,
+            progress=lambda current, total, detail: console.progress(
+                "DOWNLOAD", current, total, market_started, detail
+            ),
+        )
     if skip_production_sync:
         console.status("PRODUCTION", "Using cached decision outcomes", "yellow")
     else:
         sync_production_outcomes(raw, console)
 
-    historical = build_examples(bars, config)
+    build_started = time.monotonic()
+    console.status("BUILD", "Generating leakage-safe decision and review examples")
+    historical = build_examples(
+        bars,
+        config,
+        progress=lambda current, total, detail: console.progress(
+            "BUILD", current, total, build_started, detail
+        ),
+    )
+    console.status("SPLIT", "Creating chronological train and evaluation sets")
     train_rows, eval_rows = chronological_split(historical, config.eval_fraction)
     production_rows = (
         load_production_reviews(PRODUCTION_OUTCOMES) if PRODUCTION_OUTCOMES.exists() else []
     )
     train_rows.extend(production_rows)
     train_rows.extend(identity_examples())
+    console.status("WRITE", f"Writing {len(train_rows) + len(eval_rows):,} examples")
     write_jsonl(PROCESSED_DIR / "train.jsonl", train_rows)
     write_jsonl(PROCESSED_DIR / "eval.jsonl", eval_rows)
     summary = dataset_summary(train_rows, eval_rows)
@@ -309,19 +376,33 @@ async def train(raw: dict[str, Any], console: Console, *, dry_run: bool, yes: bo
     renderer = get_renderer(raw["renderer"], tokenizer)
     max_length = int(raw["max_length"])
     row_batches = planned_rows(train_rows, raw)
-    datum_batches = [
-        [
-            conversation_to_datum(
+    datum_batches = []
+    token_count = 0
+    rendered_count = 0
+    render_total = sum(map(len, row_batches))
+    render_started = time.monotonic()
+    console.title("Render training plan")
+    for row_batch in row_batches:
+        datum_batch = []
+        for row in row_batch:
+            datum = conversation_to_datum(
                 row["messages"],
                 renderer,
                 max_length=max_length,
                 train_on_what=TrainOnWhat.LAST_ASSISTANT_MESSAGE,
             )
-            for row in batch
-        ]
-        for batch in row_batches
-    ]
-    token_count = sum(datum.model_input.length for batch in datum_batches for datum in batch)
+            datum_batch.append(datum)
+            token_count += datum.model_input.length
+            rendered_count += 1
+            console.progress(
+                "RENDER",
+                rendered_count,
+                render_total,
+                render_started,
+                f"{token_count:,} tokens",
+                "magenta",
+            )
+        datum_batches.append(datum_batch)
     cost = estimate_cost(token_count, raw)
     console.title("Training estimate")
     console.value("Model", raw["base_model"], color="magenta")
@@ -346,11 +427,13 @@ async def train(raw: dict[str, Any], console: Console, *, dry_run: bool, yes: bo
             console.status("CANCELLED", "No paid Tinker client was created", "yellow")
             return
 
+    console.status("CONNECT", "Creating the paid Tinker LoRA training client", "magenta")
     service_client = tinker.ServiceClient()
     training_client = await service_client.create_lora_training_client_async(
         base_model=raw["base_model"], rank=int(raw["lora_rank"])
     )
     checkpoint_every = int(raw["checkpoint_every"])
+    training_started = time.monotonic()
     for step, batch in enumerate(datum_batches, start=1):
         forward_future = await training_client.forward_backward_async(batch, "cross_entropy")
         optimizer_future = await training_client.optim_step_async(
@@ -363,9 +446,12 @@ async def train(raw: dict[str, Any], console: Console, *, dry_run: bool, yes: bo
         )
         weights = np.concatenate([datum.loss_fn_inputs["weights"].tolist() for datum in batch])
         loss = float(-np.dot(logprobs, weights) / weights.sum())
-        console.status(
+        console.progress(
             "TRAIN",
-            f"step {step:,}/{len(datum_batches):,}  examples {len(batch)}  loss {loss:.4f}",
+            step,
+            len(datum_batches),
+            training_started,
+            f"batch {len(batch)}  loss {loss:.4f}",
             "magenta",
         )
         if checkpoint_every > 0 and step % checkpoint_every == 0:

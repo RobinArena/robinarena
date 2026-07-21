@@ -105,6 +105,9 @@ training plan. It prints the exact rendered token count and an estimated cost,
 then asks for confirmation before creating a paid Tinker client. `--dry-run`
 stops after this preflight. In automation, pass `--yes` to confirm the paid run.
 Use `--use-existing-data` only to train an already inspected processed dataset.
+Download, dataset-build, rendering, and training progress includes percentage,
+elapsed time, throughput, and ETA. Interactive output updates in place while
+captured logs receive periodic durable progress lines.
 
 The checked Inkling training rate is configured as `$5.61` per million tokens,
 based on Tinker's published price on 2026-07-22. The estimate covers training

@@ -26,6 +26,9 @@ const providerAsset = computed(() => {
   if (code === "G36") {
     return { key: "google-gemini", src: "/providers/google-gemini.svg" };
   }
+  if (code === "INK") {
+    return { key: "thinking-machines", src: "/providers/thinking-machines.svg" };
+  }
   return undefined;
 });
 

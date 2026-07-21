@@ -11,6 +11,7 @@ export default {
     timeoutSeconds: 120,
     endpoints: [
       { name: "ready", path: "/api/ready", expectStatus: 200 },
+      { name: "frontend", path: "/", expectStatus: 200 },
     ],
   },
 };

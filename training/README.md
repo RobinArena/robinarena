@@ -108,6 +108,8 @@ Use `--use-existing-data` only to train an already inspected processed dataset.
 Download, dataset-build, rendering, and training progress includes percentage,
 elapsed time, throughput, and ETA. Interactive output updates in place while
 captured logs receive periodic durable progress lines.
+Remote operations emit a heartbeat every 10 seconds while Tinker provisions a
+client, processes a batch, applies an optimizer step, or saves a checkpoint.
 
 The checked Inkling training rate is configured as `$5.61` per million tokens,
 based on Tinker's published price on 2026-07-22. The estimate covers training

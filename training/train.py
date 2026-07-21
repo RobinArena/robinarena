@@ -10,10 +10,11 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Awaitable
 from dataclasses import fields
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from trading_data import (
     DatasetConfig,
@@ -34,6 +35,7 @@ DEFAULT_CONFIG = ROOT / "config.json"
 EXAMPLE_CONFIG = ROOT / "config.example.json"
 PROCESSED_DIR = ROOT / "data" / "processed"
 PRODUCTION_OUTCOMES = ROOT / "data" / "production" / "decision-outcomes.csv"
+Result = TypeVar("Result")
 
 
 def relaunch_in_project_environment() -> None:
@@ -127,6 +129,26 @@ class Console:
                 print()
         else:
             print(line)
+
+
+async def await_with_heartbeat(
+    operation: Awaitable[Result],
+    console: Console,
+    label: str,
+    message: str,
+    *,
+    interval: float = 10,
+) -> Result:
+    """Await a remote operation while periodically reporting that it is still active."""
+    task = asyncio.ensure_future(operation)
+    started_at = time.monotonic()
+    while not task.done():
+        done, _ = await asyncio.wait({task}, timeout=interval)
+        if done:
+            break
+        elapsed = time.monotonic() - started_at
+        console.status(label, f"{message}  {elapsed:,.0f}s elapsed", "yellow")
+    return await task
 
 
 def load_config(path: Path, console: Console) -> dict[str, Any]:
@@ -429,18 +451,44 @@ async def train(raw: dict[str, Any], console: Console, *, dry_run: bool, yes: bo
 
     console.status("CONNECT", "Creating the paid Tinker LoRA training client", "magenta")
     service_client = tinker.ServiceClient()
-    training_client = await service_client.create_lora_training_client_async(
-        base_model=raw["base_model"], rank=int(raw["lora_rank"])
+    training_client = await await_with_heartbeat(
+        service_client.create_lora_training_client_async(
+            base_model=raw["base_model"], rank=int(raw["lora_rank"])
+        ),
+        console,
+        "CONNECT",
+        "Waiting for Tinker to provision the training client",
     )
+    console.status("CONNECTED", "Tinker training client is ready", "green")
     checkpoint_every = int(raw["checkpoint_every"])
     training_started = time.monotonic()
     for step, batch in enumerate(datum_batches, start=1):
-        forward_future = await training_client.forward_backward_async(batch, "cross_entropy")
-        optimizer_future = await training_client.optim_step_async(
-            tinker.AdamParams(learning_rate=float(raw["learning_rate"]))
+        forward_future = await await_with_heartbeat(
+            training_client.forward_backward_async(batch, "cross_entropy"),
+            console,
+            "BATCH",
+            f"Submitting forward/backward step {step:,}",
         )
-        forward_result = await forward_future.result_async()
-        await optimizer_future.result_async()
+        optimizer_future = await await_with_heartbeat(
+            training_client.optim_step_async(
+                tinker.AdamParams(learning_rate=float(raw["learning_rate"]))
+            ),
+            console,
+            "OPTIMIZER",
+            f"Submitting optimizer step {step:,}",
+        )
+        forward_result = await await_with_heartbeat(
+            forward_future.result_async(),
+            console,
+            "BATCH",
+            f"Waiting for forward/backward step {step:,}",
+        )
+        await await_with_heartbeat(
+            optimizer_future.result_async(),
+            console,
+            "OPTIMIZER",
+            f"Waiting for optimizer step {step:,}",
+        )
         logprobs = np.concatenate(
             [output["logprobs"].tolist() for output in forward_result.loss_fn_outputs]
         )
@@ -455,20 +503,47 @@ async def train(raw: dict[str, Any], console: Console, *, dry_run: bool, yes: bo
             "magenta",
         )
         if checkpoint_every > 0 and step % checkpoint_every == 0:
-            checkpoint = await (
-                await training_client.save_state_async(name=f"step-{step}")
-            ).result_async()
+            checkpoint_future = await await_with_heartbeat(
+                training_client.save_state_async(name=f"step-{step}"),
+                console,
+                "CHECKPOINT",
+                f"Requesting checkpoint at step {step:,}",
+            )
+            checkpoint = await await_with_heartbeat(
+                checkpoint_future.result_async(),
+                console,
+                "CHECKPOINT",
+                f"Saving checkpoint at step {step:,}",
+            )
             console.status("CHECKPOINT", checkpoint.path, "green")
 
     if not datum_batches:
         raise ValueError("No training steps planned; check batch_size and max_steps")
     final_step = len(datum_batches)
-    final_state = await (
-        await training_client.save_state_async(name=f"final-step-{final_step}")
-    ).result_async()
-    sampler_weights = await (
-        await training_client.save_weights_for_sampler_async(name=f"sampler-step-{final_step}")
-    ).result_async()
+    final_future = await await_with_heartbeat(
+        training_client.save_state_async(name=f"final-step-{final_step}"),
+        console,
+        "FINALIZE",
+        "Requesting final resumable checkpoint",
+    )
+    final_state = await await_with_heartbeat(
+        final_future.result_async(),
+        console,
+        "FINALIZE",
+        "Saving final resumable checkpoint",
+    )
+    sampler_future = await await_with_heartbeat(
+        training_client.save_weights_for_sampler_async(name=f"sampler-step-{final_step}"),
+        console,
+        "FINALIZE",
+        "Requesting sampler weights",
+    )
+    sampler_weights = await await_with_heartbeat(
+        sampler_future.result_async(),
+        console,
+        "FINALIZE",
+        "Saving sampler weights",
+    )
     console.title("Training complete")
     console.value("Resumable checkpoint", final_state.path, color="green")
     console.value("Sampler weights", sampler_weights.path, color="green")

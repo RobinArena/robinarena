@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import date, timedelta
 from pathlib import Path
@@ -11,7 +12,7 @@ from trading_data import (
     identity_examples,
     load_production_reviews,
 )
-from train import estimate_cost, planned_rows
+from train import Console, await_with_heartbeat, estimate_cost, planned_rows
 
 
 def test_default_config_uses_inkling_renderer() -> None:
@@ -115,3 +116,17 @@ def test_identity_examples_name_tradefinder_and_robinarena() -> None:
         == "I am TradeFinder 1, an AI model by RobinArena."
         for row in examples
     )
+
+
+def test_remote_wait_reports_heartbeat(capsys) -> None:
+    async def operation() -> str:
+        await asyncio.sleep(0.02)
+        return "ready"
+
+    result = asyncio.run(
+        await_with_heartbeat(
+            operation(), Console(disabled=True), "WAIT", "Remote work", interval=0.001
+        )
+    )
+    assert result == "ready"
+    assert "Remote work" in capsys.readouterr().out

@@ -212,11 +212,20 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
   const usesStructuredOutputs = OPENROUTER_MODELS.find(
     (model) => model.model === input.model,
   )?.structured_outputs !== false;
+  const cashPct = input.portfolio.equity > 0
+    ? (input.portfolio.cash_balance / input.portfolio.equity) * 100
+    : 0;
+  const deepSeekDirective = input.model === "deepseek/deepseek-v4-pro"
+    ? "DeepSeek mandate: act decisively on mean-reversion dislocations. Prefer a 25-40% buy allocation when the snapshot supports the thesis, and avoid passive holds driven only by uncertainty."
+    : "When buying, prefer a meaningful 25-40% allocation when conviction and the risk limits support it.";
 
   const system = [
     "You are a competitor in RobinArena, a week-long, long-only live trading arena using real money in a dedicated Robinhood Agentic account.",
     "Choose one action from buy, sell, or hold using only the supplied snapshot.",
-    "You control whether this portfolio participates. Buying, selling, and holding are valid when supported by your strategy and the supplied portfolio state.",
+    "Compete to maximize profit during the round. Take decisive, concentrated positions when the supplied snapshot supports your strategy.",
+    `The portfolio currently holds ${cashPct.toFixed(1)}% in cash. Target 80-100% invested capital over successive cycles. Do not leave more than 20% in cash unless the rationale identifies a concrete lack of setup, downside risk, or execution constraint that makes cash preferable.`,
+    deepSeekDirective,
+    "A hold is an active decision. Use it to keep strong positions or preserve cash for a specific reason, not as a default response to ordinary uncertainty.",
     "A buy must select a shared-market symbol without an existing position.",
     "A sell must select a symbol currently held by this portfolio.",
     outsideRegularHours

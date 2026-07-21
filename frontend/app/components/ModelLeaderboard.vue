@@ -29,7 +29,7 @@ const emit = defineEmits<{
         <small>{{ model.strategy }}</small>
       </span>
       <span class="leaderboard-equity">
-        <strong>{{ formatCurrency(model.equity, true) }}</strong>
+        <strong>{{ formatCurrency(model.equity) }}</strong>
         <small>{{ model.open_positions }} open</small>
       </span>
       <span :class="model.return_pct >= 0 ? 'value-positive' : 'value-negative'">

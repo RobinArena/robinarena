@@ -1,4 +1,5 @@
 import { APIError } from "encore.dev/api";
+import { equalCapitalReconciliation } from "./capital-reconciliation";
 import {
   COMPETITION_ROUND_DAYS,
   arenaTradingSession,
@@ -878,20 +879,50 @@ async function reconcileArenaCapital(account: {
   const tx = await db.begin();
   try {
     const state = await tx.queryRow<{
-      operator_capital_ceiling: string | number;
+      capital_limit: string | number;
       capital_initialized_at: Date | string | null;
     }>`
-      SELECT operator_capital_ceiling, capital_initialized_at
+      SELECT capital_limit, capital_initialized_at
       FROM arena_state WHERE id = 1 FOR UPDATE
     `;
     if (!state) throw new Error("arena state is missing");
-    const ceiling = numeric(state.operator_capital_ceiling);
-    const deployable = rounded(Math.max(0, Math.min(ceiling, account.equity)), 2);
-    const allocation = rounded(deployable / 4, 4);
-    if (deployable < 4 || allocation < 1) {
+    const agents = await tx.queryAll<{
+      id: string;
+      initial_balance: string | number;
+      cash_balance: string | number;
+      equity: string | number;
+    }>`
+      SELECT id, initial_balance, cash_balance, equity
+      FROM arena_agents
+      ORDER BY id
+      FOR UPDATE
+    `;
+    if (agents.length === 0) throw new Error("capital reconciliation requires at least one agent");
+    const brokerCapital = rounded(Math.max(0, account.equity), 2);
+    let capitalLimit = brokerCapital;
+    let reconciliation: ReturnType<typeof equalCapitalReconciliation> | undefined;
+
+    if (state.capital_initialized_at) {
+      try {
+        reconciliation = equalCapitalReconciliation(
+          brokerCapital,
+          agents.map((agent) => ({
+            initialBalance: numeric(agent.initial_balance),
+            cashBalance: numeric(agent.cash_balance),
+            equity: numeric(agent.equity),
+          })),
+        );
+      } catch (cause) {
+        throw APIError.failedPrecondition(errorText(cause));
+      }
+      capitalLimit = rounded(numeric(state.capital_limit) + reconciliation.difference, 4);
+    }
+
+    const allocation = rounded(capitalLimit / agents.length, 4);
+    if (capitalLimit < agents.length || allocation < 1) {
       await tx.exec`
         UPDATE arena_state SET
-          capital_limit = ${deployable},
+          capital_limit = ${capitalLimit},
           allocation_per_model = ${allocation},
           capital_source = 'robinhood',
           updated_at = now()
@@ -899,13 +930,14 @@ async function reconcileArenaCapital(account: {
       `;
       await tx.commit();
       throw APIError.failedPrecondition(
-        "the Agentic account needs at least $4.00 to maintain four model ledgers",
+        `the Agentic account needs at least $${agents.length.toFixed(2)} to maintain ${agents.length} model ledgers`,
       );
     }
 
     await tx.exec`
       UPDATE arena_state SET
-        capital_limit = ${deployable},
+        operator_capital_ceiling = ${capitalLimit},
+        capital_limit = ${capitalLimit},
         allocation_per_model = ${allocation},
         capital_source = 'robinhood',
         capital_initialized_at = coalesce(capital_initialized_at, now()),
@@ -941,7 +973,7 @@ async function reconcileArenaCapital(account: {
       `;
       if (!activeRound) throw new Error("the active weekly round is missing");
       await tx.exec`
-        UPDATE arena_rounds SET starting_capital = ${deployable}, updated_at = now()
+        UPDATE arena_rounds SET starting_capital = ${capitalLimit}, updated_at = now()
         WHERE id = ${activeRound.id}
       `;
       await tx.exec`
@@ -958,6 +990,34 @@ async function reconcileArenaCapital(account: {
         SELECT id, equity, 'robinhood_mcp', ${activeRound.id}
         FROM arena_agents
       `;
+    } else if (reconciliation) {
+      if (reconciliation.adjustmentPerAgent !== 0) {
+        const adjustment = reconciliation.adjustmentPerAgent;
+        await tx.exec`
+          UPDATE arena_agents SET
+            initial_balance = initial_balance + ${adjustment},
+            cash_balance = cash_balance + ${adjustment},
+            equity = equity + ${adjustment},
+            max_daily_loss = (initial_balance + ${adjustment}) * 0.05,
+            updated_at = now()
+        `;
+        const activeRound = await tx.queryRow<{ id: string }>`
+          SELECT id FROM arena_rounds WHERE status = 'active' FOR UPDATE
+        `;
+        if (!activeRound) throw new Error("the active weekly round is missing");
+        await tx.exec`
+          UPDATE arena_rounds SET
+            starting_capital = starting_capital + ${reconciliation.difference},
+            updated_at = now()
+          WHERE id = ${activeRound.id}
+        `;
+        await tx.exec`
+          UPDATE arena_round_results SET
+            starting_equity = starting_equity + ${adjustment},
+            updated_at = now()
+          WHERE round_id = ${activeRound.id}
+        `;
+      }
     }
     await tx.commit();
   } catch (cause) {

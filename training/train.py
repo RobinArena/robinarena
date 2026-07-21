@@ -151,6 +151,46 @@ async def await_with_heartbeat(
     return await task
 
 
+async def create_tinker_service_client(raw: dict[str, Any], console: Console) -> Any:
+    """Bootstrap Tinker with HTTPX when pyqwest cannot validate the host certificate."""
+    import tinker
+    from tinker import types
+    from tinker._client import AsyncTinker
+    from tinker._version import __version__ as sdk_version
+
+    timeout = float(raw.get("tinker_timeout_seconds", 30))
+    max_retries = int(raw.get("tinker_max_retries", 2))
+    bootstrap = AsyncTinker(
+        api_key=os.environ["TINKER_API_KEY"],
+        timeout=timeout,
+        max_retries=max_retries,
+        _client_config=types.ClientConfigResponse(use_pyqwest_transport=False),
+    )
+    try:
+        client_config = await await_with_heartbeat(
+            bootstrap.service.client_config(
+                request=types.ClientConfigRequest(sdk_version=sdk_version)
+            ),
+            console,
+            "CONNECT",
+            "Fetching Tinker client configuration",
+        )
+    finally:
+        await bootstrap.close()
+    if client_config.use_pyqwest_transport:
+        console.status(
+            "TRANSPORT",
+            "Using HTTPX because pyqwest cannot validate this host's certificate chain",
+            "yellow",
+        )
+    client_config = client_config.model_copy(update={"use_pyqwest_transport": False})
+    return tinker.ServiceClient(
+        timeout=timeout,
+        max_retries=max_retries,
+        _client_config=client_config.model_dump(),
+    )
+
+
 def load_config(path: Path, console: Console) -> dict[str, Any]:
     source = path if path.exists() else EXAMPLE_CONFIG
     with source.open(encoding="utf-8") as handle:
@@ -450,10 +490,12 @@ async def train(raw: dict[str, Any], console: Console, *, dry_run: bool, yes: bo
             return
 
     console.status("CONNECT", "Creating the paid Tinker LoRA training client", "magenta")
-    service_client = tinker.ServiceClient()
+    service_client = await create_tinker_service_client(raw, console)
     training_client = await await_with_heartbeat(
-        service_client.create_lora_training_client_async(
-            base_model=raw["base_model"], rank=int(raw["lora_rank"])
+        asyncio.to_thread(
+            service_client.create_lora_training_client,
+            base_model=raw["base_model"],
+            rank=int(raw["lora_rank"]),
         ),
         console,
         "CONNECT",

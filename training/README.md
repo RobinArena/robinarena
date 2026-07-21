@@ -110,6 +110,11 @@ elapsed time, throughput, and ETA. Interactive output updates in place while
 captured logs receive periodic durable progress lines.
 Remote operations emit a heartbeat every 10 seconds while Tinker provisions a
 client, processes a batch, applies an optimizer step, or saves a checkpoint.
+API requests use a 30-second timeout with two retries by default, avoiding the
+SDK's much longer silent retry window. Both values are configurable.
+The CLI preserves Tinker's server-provided client flags while forcing its
+standard HTTPX transport. This host's certificate chain is accepted by HTTPX
+and rejected by the optional pyqwest transport with `UnknownIssuer`.
 
 The checked Inkling training rate is configured as `$5.61` per million tokens,
 based on Tinker's published price on 2026-07-22. The estimate covers training

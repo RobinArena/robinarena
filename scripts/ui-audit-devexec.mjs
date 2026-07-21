@@ -37,6 +37,7 @@ async function auditPage(route, file, viewport, authenticated = false) {
   ));
   const xProfileHref = await page.locator('a[href="https://x.com/RobinArenaFun"]').first().getAttribute("href");
   const xProfileLinkCount = await page.locator('a[href="https://x.com/RobinArenaFun"]').count();
+  const leaderboardBalances = await page.locator(".leaderboard-equity > strong").allTextContents();
   const fontFamily = await page.locator("body").evaluate((element) => getComputedStyle(element).fontFamily);
   const horizontalOverflow = await page.evaluate(() => (
     document.documentElement.scrollWidth - document.documentElement.clientWidth
@@ -78,6 +79,7 @@ async function auditPage(route, file, viewport, authenticated = false) {
     logoLoaded,
     xProfileHref,
     xProfileLinkCount,
+    leaderboardBalances,
     fontFamily,
     horizontalOverflow,
     responsiveLayout,
@@ -278,6 +280,12 @@ try {
   assert.match(publicDesktop.text, /RobinArena/);
   assert.match(publicDesktop.text, /@RobinArenaFun/);
   assert.match(publicDesktop.text, /\$25\.00/);
+  assert.equal(publicDesktop.leaderboardBalances.length, 4);
+  assert.equal(
+    publicDesktop.leaderboardBalances.every((balance) => /^\$[\d,]+\.\d{2}$/.test(balance.trim())),
+    true,
+    "leaderboard balances display reconciled cents without whole-dollar rounding",
+  );
   assert.match(publicDesktop.text, /\$100\.00/);
   assert.match(publicDesktop.text, /\d+d \d+h left/);
   assert.match(publicDesktop.text, /Hourly, around the clock/);

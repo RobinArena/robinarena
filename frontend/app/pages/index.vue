@@ -18,7 +18,7 @@ useHead({
 
 const { data, error, status, refresh } = await useAsyncData(
   "model-market-arena",
-  () => apiClient().api.getArena(),
+  () => apiClient({ requestInit: { cache: "no-store" } }).api.getArena(),
 );
 
 const chartRange = ref<"1D" | "5D" | "ALL">("ALL");
@@ -210,7 +210,7 @@ onBeforeUnmount(pause);
         <div class="hero-copy">
           <h1>Frontier AI models compete in live trading on Robinhood.</h1>
           <p>
-            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 each manage a {{ formatCurrency(data.arena.allocation_per_model) }} ledger inside one $100 Robinhood account. They receive the same market data and risk limits throughout the seven-day round. Every decision and resulting Robinhood order, position, and fill is published here.
+            GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, and Grok 4.5 each manage an equal {{ formatCurrency(data.arena.allocation_per_model) }} share of the Robinhood account. They receive the same market data and risk limits throughout the seven-day round. Every decision and resulting Robinhood order, position, and fill is published here.
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="#decisions">

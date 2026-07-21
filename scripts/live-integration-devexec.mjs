@@ -56,6 +56,7 @@ let oauthRegistrations = 0;
 let oauthCodeExchanges = 0;
 let oauthRefreshes = 0;
 let dropNextPlacementResponse = false;
+let brokerTotalValue = 80;
 const decisionInputs = [];
 const decisionSchemas = [];
 
@@ -63,7 +64,7 @@ function cashBalance() {
   return orders.reduce((cash, order) => {
     const notional = order.filled_quantity * order.average_fill_price;
     return order.side === "buy" ? cash - notional : cash + notional;
-  }, 100);
+  }, brokerTotalValue);
 }
 
 function openPositions() {
@@ -184,7 +185,7 @@ const mcp = createServer(async (request, response) => {
   } else if (name === "get_portfolio") {
     payload = {
       data: {
-        total_value: "100",
+        total_value: String(brokerTotalValue),
         cash: String(cashBalance()),
         buying_power: {
           buying_power: String(cashBalance()),
@@ -404,13 +405,34 @@ try {
   assert.equal(oauthStatus.scheduler.consecutive_failures, 0);
   const sync = await apiJson("/admin/sync", { method: "POST", headers });
   assert.equal(sync.status.arena.market.length, 11);
-  assert.deepEqual(sync.status.arena.models.map((model) => model.initial_balance), [25, 25, 25, 25]);
-  assert.equal(sync.status.arena.arena.capital_limit, 100);
-  assert.equal(sync.status.broker.equity, 100);
-  assert.equal(sync.status.broker.deployable_capital, 100);
-  assert.equal(sync.status.broker.allocation_per_model, 25);
+  assert.deepEqual(sync.status.arena.models.map((model) => model.initial_balance), [20, 20, 20, 20]);
+  assert.equal(sync.status.arena.arena.capital_limit, 80);
+  assert.equal(sync.status.broker.equity, 80);
+  assert.equal(sync.status.broker.deployable_capital, 80);
+  assert.equal(sync.status.broker.allocation_per_model, 20);
   assert.equal(sync.status.broker.capital_source, "robinhood");
   assert.equal(sync.status.arena.arena.live_armed, false);
+
+  brokerTotalValue = 100;
+  const deposited = await apiJson("/admin/sync", { method: "POST", headers });
+  assert.deepEqual(
+    deposited.status.arena.models.map((model) => model.initial_balance),
+    [25, 25, 25, 25],
+    "a broker capital increase is split equally across agent baselines",
+  );
+  assert.deepEqual(
+    deposited.status.arena.models.map((model) => model.cash_balance),
+    [25, 25, 25, 25],
+    "a broker capital increase is credited equally to agent cash",
+  );
+  assert.deepEqual(
+    deposited.status.arena.models.map((model) => model.equity),
+    [25, 25, 25, 25],
+    "a broker capital increase is credited equally to agent equity",
+  );
+  assert.equal(deposited.status.arena.arena.starting_capital, 100);
+  assert.equal(deposited.status.broker.deployable_capital, 100);
+  assert.equal(deposited.status.broker.allocation_per_model, 25);
   assert.equal(oauthRegistrations, 1, "OAuth dynamic client registrations");
   assert.equal(oauthCodeExchanges, 1, "OAuth authorization code exchanges");
   assert.equal(oauthRefreshes, 1, "OAuth refreshes");

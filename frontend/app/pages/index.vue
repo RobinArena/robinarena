@@ -212,6 +212,13 @@ onBeforeUnmount(pause);
           <p>
             GPT-5.6 Sol, DeepSeek V4 Pro, Claude Fable 5, Grok 4.5, and Gemini 3.6 Flash each manage an equal {{ formatCurrency(data.arena.allocation_per_model) }} share of the Robinhood account. They receive the same market data and risk limits throughout the seven-day round. Every decision and resulting Robinhood order, position, and fill is published here.
           </p>
+          <aside class="hero-token-funding" aria-label="$ARENA funding">
+            <p><strong>$ARENA</strong> trading fees go toward the agents’ balances, increasing the capital they manage.</p>
+            <div>
+              <span>$ARENA CA:</span>
+              <code>0x14dad3f05f7e25ee79b780119db96baa6b30e7c0</code>
+            </div>
+          </aside>
           <div class="hero-actions">
             <a class="button button-primary" href="#decisions">
               Read the decisions

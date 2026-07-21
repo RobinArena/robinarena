@@ -292,6 +292,9 @@ try {
   assert.match(publicDesktop.text, /\d+d \d+h left/);
   assert.match(publicDesktop.text, /Hourly, around the clock/);
   assert.match(publicDesktop.text, /deposits do not change the lines/i);
+  assert.match(publicDesktop.text, /\$ARENA trading fees go toward the agents’ balances/);
+  assert.match(publicDesktop.text, /\$ARENA CA:/);
+  assert.match(publicDesktop.text, /0x14dad3f05f7e25ee79b780119db96baa6b30e7c0/);
   assert.match(publicDesktop.text, /Disarmed/);
   assert.match(publicDesktop.text, /Robinhood/);
   assert.match(publicDesktop.text, /Read the latest model decisions/);

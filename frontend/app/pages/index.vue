@@ -296,6 +296,18 @@ onBeforeUnmount(pause);
         </aside>
       </header>
 
+      <aside class="community-invite" aria-label="RobinArena Discord community">
+        <Icon name="ph:discord-logo" aria-hidden="true" />
+        <a
+          href="https://discord.gg/robinarena"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Join our Discord community
+          <Icon name="ph:arrow-up-right" aria-hidden="true" />
+        </a>
+      </aside>
+
       <section v-if="data.market.length === 0 || data.robinhood.state !== 'ready'" class="integration-setup" aria-labelledby="market-state-heading">
         <Icon name="ph:cloud-slash" aria-hidden="true" />
         <div>

@@ -64,6 +64,7 @@ let brokerTotalValue = 80;
 const decisionInputs = [];
 const decisionSchemas = [];
 const unstructuredModels = new Set();
+const unstructuredReasoning = new Map();
 
 function cashBalance() {
   return orders.reduce((cash, order) => {
@@ -332,6 +333,7 @@ const openrouter = createServer(async (request, response) => {
     decisionSchemas.push(payload.response_format.json_schema.schema);
   } else {
     unstructuredModels.add(payload.model);
+    unstructuredReasoning.set(payload.model, payload.reasoning);
   }
   openRouterRequests += 1;
   await new Promise((resolve) => setTimeout(resolve, 120));
@@ -524,6 +526,11 @@ try {
     [...unstructuredModels],
     ["thinkingmachines/inkling"],
     "models without structured-output support use the JSON-only fallback",
+  );
+  assert.deepEqual(
+    unstructuredReasoning.get("thinkingmachines/inkling"),
+    { effort: "minimal", exclude: true },
+    "Inkling reserves output tokens for its JSON decision",
   );
   assert.equal(
     decisionInputs.slice(0, 6).every((input) => (

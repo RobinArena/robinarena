@@ -280,7 +280,13 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
               schema,
             },
           },
-        } : {}),
+        } : {
+          reasoning: {
+            effort: "minimal",
+            exclude: true,
+          },
+          temperature: 0.2,
+        }),
         max_tokens: 1200,
         stream: false,
       }),

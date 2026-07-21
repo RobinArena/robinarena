@@ -38,7 +38,6 @@ export default defineNuxtConfig({
         "ph:caret-down",
         "ph:check-circle",
         "ph:circle-notch",
-        "ph:discord-logo",
         "ph:link",
         "ph:pause-circle",
         "ph:play-circle",

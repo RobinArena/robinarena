@@ -23,6 +23,9 @@ const providerAsset = computed(() => {
   if (code === "X45") {
     return { key: "xai", src: "/providers/xai.png" };
   }
+  if (code === "G36") {
+    return { key: "google-gemini", src: "/providers/google-gemini.svg" };
+  }
   return undefined;
 });
 

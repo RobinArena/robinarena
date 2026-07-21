@@ -404,6 +404,7 @@ export namespace api {
     export interface EquityPoint {
         "captured_at": string
         equity: number
+        profit: number
         "return_pct": number
     }
 

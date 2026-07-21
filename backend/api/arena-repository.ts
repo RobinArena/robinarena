@@ -383,6 +383,7 @@ export async function listEquitySeries(): Promise<EquitySeries[]> {
     current.points.push({
       captured_at: timestamp(row.captured_at),
       equity,
+      profit: equity - initial,
       return_pct: initial === 0 ? 0 : ((equity - initial) / initial) * 100,
     });
     series.set(row.agent_id, current);

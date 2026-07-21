@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { api } from "~/generated/encore-client";
-import { formatCurrency, formatPercent } from "~/utils/format";
+import { formatCurrency, formatPercent, formatSignedCurrency } from "~/utils/format";
 
 const props = defineProps<{
   series: api.EquitySeries[];
@@ -79,7 +79,7 @@ const activeSeries = computed(() => (
 
 const chart = computed(() => {
   const values = activeSeries.value.flatMap(
-    (item) => item.points.map((point) => point.return_pct),
+    (item) => item.points.map((point) => point.profit),
   );
   const timestamps = activeSeries.value.flatMap(
     (item) => item.points.map((point) => Date.parse(point.captured_at)),
@@ -135,7 +135,7 @@ const chart = computed(() => {
 const allSeriesDomain = computed(() => {
   const points = visibleSeries.value.flatMap((item) => item.points);
   if (!points.length) return null;
-  const values = points.map((point) => point.return_pct);
+  const values = points.map((point) => point.profit);
   const timestamps = points.map((point) => Date.parse(point.captured_at));
   const rawLow = Math.min(0, ...values);
   const rawHigh = Math.max(0, ...values);
@@ -210,7 +210,7 @@ function connectedPath(
     const startsSegment = index === 0
       || previousTimestamp === undefined
       || timestamp - previousTimestamp > maxConnectedGap;
-    return `${startsSegment ? "M" : "L"}${x(timestamp).toFixed(2)},${y(point.return_pct).toFixed(2)}`;
+    return `${startsSegment ? "M" : "L"}${x(timestamp).toFixed(2)},${y(point.profit).toFixed(2)}`;
   }).join(" ");
 }
 
@@ -233,11 +233,11 @@ function focusPortfolio(agentId: string) {
 
 function axisLabel(value: number): string {
   const span = chart.value?.span || 1;
-  const decimals = span >= 10 ? 0 : span >= 1 ? 1 : span >= 0.1 ? 2 : 3;
+  const decimals = span >= 100 ? 0 : span >= 10 ? 1 : 2;
   const threshold = 0.5 * 10 ** -decimals;
   const normalized = Math.abs(value) < threshold ? 0 : value;
   const sign = normalized > 0 ? "+" : "";
-  return `${sign}${normalized.toFixed(decimals)}%`;
+  return `${sign}${normalized < 0 ? "-" : ""}$${Math.abs(normalized).toFixed(decimals)}`;
 }
 
 function timeLabel(timestamp: number): string {
@@ -279,7 +279,7 @@ function miniPath(agentId: string): string {
       ? Date.parse(previous.captured_at)
       : undefined;
     const x = ((timestamp - domain.timeLow) / timeSpan) * 160;
-    const y = ((domain.high - point.return_pct) / valueSpan) * 44;
+    const y = ((domain.high - point.profit) / valueSpan) * 44;
     const startsSegment = index === 0
       || previousTimestamp === undefined
       || timestamp - previousTimestamp > maxConnectedGap;
@@ -298,8 +298,8 @@ function miniZeroY(): number {
   <div v-if="chart" class="arena-chart">
     <div class="chart-toolbar">
       <div>
-        <strong>Portfolio comparison</strong>
-        <span>Broker-reconciled changes share one scale; unchanged periods appear as gaps</span>
+        <strong>Profit comparison</strong>
+        <span>Trading profit shares one dollar scale; deposits do not change the lines</span>
       </div>
       <div class="chart-series-controls" role="group" aria-label="Portfolio shown on chart">
         <button
@@ -332,8 +332,8 @@ function miniZeroY(): number {
             :viewBox="`0 0 ${width} ${height}`"
             role="img"
             :aria-label="focusedAgentId === 'all'
-              ? 'Return history for all four isolated model portfolios'
-              : `Return history for ${chart.lines[0]?.agent_name}`"
+              ? 'Profit history for all isolated model portfolios'
+              : `Profit history for ${chart.lines[0]?.agent_name}`"
             @pointermove="setHover"
             @pointerleave="hoverTimestamp = null"
           >
@@ -387,7 +387,7 @@ function miniZeroY(): number {
               <circle
                 v-if="line.last"
                 :cx="chart.x(Date.parse(line.last.captured_at))"
-                :cy="chart.y(line.last.return_pct)"
+                :cy="chart.y(line.last.profit)"
                 r="4.5"
                 class="chart-last-point"
               />
@@ -405,7 +405,7 @@ function miniZeroY(): number {
                 v-for="item in hover.entries"
                 :key="`${item.agentId}-hover`"
                 :cx="chart.x(Date.parse(item.point.captured_at))"
-                :cy="chart.y(item.point.return_pct)"
+                :cy="chart.y(item.point.profit)"
                 r="5"
                 class="chart-hover-point"
                 :style="{ '--series-accent': item.accent }"
@@ -426,7 +426,7 @@ function miniZeroY(): number {
               <span class="legend-swatch is-series" :style="{ '--series-accent': item.accent }" />
               <span>{{ item.name }}</span>
               <strong>
-                {{ formatCurrency(item.point.equity) }}
+                {{ formatSignedCurrency(item.point.profit) }}
                 <small :class="item.point.return_pct >= 0 ? 'value-positive' : 'value-negative'">
                   {{ formatPercent(item.point.return_pct) }}
                 </small>
@@ -457,7 +457,7 @@ function miniZeroY(): number {
             <small>{{ card.model.strategy }}</small>
           </span>
           <span class="portfolio-lane-return" :class="card.model.return_pct >= 0 ? 'value-positive' : 'value-negative'">
-            {{ formatPercent(card.model.return_pct) }}
+            {{ formatSignedCurrency(card.model.equity - card.model.round_starting_equity) }}
           </span>
         </button>
 
@@ -493,6 +493,7 @@ function miniZeroY(): number {
         {{ card.model.name }}:
         {{ formatCurrency(card.model.equity) }} equity,
         {{ formatCurrency(card.model.cash_balance) }} cash,
+        {{ formatSignedCurrency(card.model.equity - card.model.round_starting_equity) }} profit,
         {{ formatPercent(card.model.return_pct) }} return,
         positions {{ card.symbols.join(", ") || "none" }}.
       </p>
@@ -501,6 +502,6 @@ function miniZeroY(): number {
 
   <div v-else class="empty-state">
     <Icon name="ph:chart-line" aria-hidden="true" />
-    <p>Equity history will appear after the first broker reconciliation.</p>
+    <p>Profit history will appear after the first broker reconciliation.</p>
   </div>
 </template>

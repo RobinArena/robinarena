@@ -1,0 +1,21 @@
+{
+  "symbols": ["ACHR", "AMZN", "JOBY", "LCID", "META", "MSFT", "NVDA", "PAGS", "SOUN", "SPY", "TSLA"],
+  "start": "2019-01-01",
+  "end": null,
+  "lookback_days": 20,
+  "forward_days": 5,
+  "buy_return_pct": 2.0,
+  "sell_return_pct": -2.0,
+  "eval_fraction": 0.1,
+  "base_model": "Qwen/Qwen3.5-4B",
+  "renderer": "qwen3_5_disable_thinking",
+  "lora_rank": 32,
+  "learning_rate": 0.0001,
+  "batch_size": 8,
+  "epochs": 1,
+  "max_length": 4096,
+  "seed": 17,
+  "checkpoint_every": 100,
+  "max_steps": null
+}
+

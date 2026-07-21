@@ -215,7 +215,7 @@ onBeforeUnmount(pause);
           <aside class="hero-token-funding" aria-label="$ARENA funding">
             <p><strong>$ARENA</strong> trading fees go toward the agents’ balances, increasing the capital they manage.</p>
             <div>
-              <span>$ARENA CA:</span>
+              <span>Contract address</span>
               <code>0x14dad3f05f7e25ee79b780119db96baa6b30e7c0</code>
             </div>
           </aside>

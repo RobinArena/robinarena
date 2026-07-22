@@ -38,7 +38,7 @@ PRODUCTION_OUTCOMES = ROOT / "data" / "production" / "decision-outcomes.csv"
 Result = TypeVar("Result")
 
 
-def relaunch_in_project_environment() -> None:
+def relaunch_in_project_environment(script: Path | None = None) -> None:
     """Use the local training environment when the command starts with system Python."""
     venv_python = ROOT / ".venv" / "bin" / "python"
     if not venv_python.exists() or Path(sys.prefix) == ROOT / ".venv":
@@ -48,7 +48,7 @@ def relaunch_in_project_environment() -> None:
     environment["PATH"] = f"{venv_python.parent}{os.pathsep}{environment.get('PATH', '')}"
     os.execve(
         str(venv_python),
-        [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]],
+        [str(venv_python), str((script or Path(__file__)).resolve()), *sys.argv[1:]],
         environment,
     )
 
@@ -153,6 +153,7 @@ async def await_with_heartbeat(
 
 async def create_tinker_service_client(raw: dict[str, Any], console: Console) -> Any:
     """Bootstrap Tinker with HTTPX when pyqwest cannot validate the host certificate."""
+    os.environ.setdefault("TINKER_TELEMETRY", "0")
     import tinker
     from tinker import types
     from tinker._client import AsyncTinker

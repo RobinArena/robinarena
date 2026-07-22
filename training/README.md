@@ -129,6 +129,42 @@ updates, and saves resumable state plus sampler weights. Copy the printed
 `python train.py all` remains an alias for a fresh prepare followed by training.
 Training is a paid remote operation and requires `TINKER_API_KEY`.
 
+## Chat with TradeFinder 1
+
+The completed run's sampler checkpoint is the default in `chat.py`. It uses the
+same `tml_v0` renderer as training and keeps conversation history until `/clear`
+or `/quit`:
+
+```sh
+nstack env run -- python training/chat.py
+nstack env run -- python training/chat.py "Review a buy decision for NVDA"
+```
+
+Sampling runs on Tinker and requires `TINKER_API_KEY`. Override the saved model
+with `--checkpoint tinker://...` after a later training run.
+
+## Download model artifacts
+
+Download the Tinker LoRA adapter without the large base model:
+
+```sh
+nstack env run -- python training/download_model.py adapter
+```
+
+To prepare a standalone local model, run:
+
+```sh
+nstack env run -- python training/download_model.py gguf
+```
+
+The GGUF command downloads the seven-part Inkling `UD-IQ1_S` base, converts the
+TradeFinder adapter, and merges both into
+`training/runs/tradefinder-1/tradefinder-1-inkling-iq1_s.gguf`. Downloads and
+conversion tools stay under the ignored `training/runs` directory. The base is
+about 270 GB and the merge temporarily needs roughly 560 GB of free disk. This
+very-low-bit quantization fits the current host but sacrifices model quality.
+Use the Tinker sampler for fidelity to the trained checkpoint.
+
 ## Validate local code
 
 ```sh
@@ -147,3 +183,5 @@ the adapter offline and in paper trading before any live-money use.
 - [First supervised fine-tuning tutorial](https://tinker-docs.thinkingmachines.ai/tutorials/basics/first-sft/)
 - [Tinker supervised learning guide](https://tinker-docs.thinkingmachines.ai/cookbook/supervised-learning/)
 - [Supported models and pricing](https://tinker-docs.thinkingmachines.ai/tinker/models/)
+- [Downloading and merging Tinker weights](https://tinker-docs.thinkingmachines.ai/tutorials/core-concepts/weights/)
+- [llama.cpp LoRA-to-GGUF converter](https://github.com/ggml-org/llama.cpp/blob/master/convert_lora_to_gguf.py)

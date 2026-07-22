@@ -29,6 +29,7 @@ import type {
   ModelRoundResult,
   RobinhoodConnectResponse,
 } from "./types";
+import { requireOperator } from "./gateway";
 
 interface ArmRequest {
   confirmation: string;
@@ -57,6 +58,7 @@ interface RoundControlResponse extends AdminControlResponse {
 }
 
 async function adminStatus(): Promise<AdminStatusResponse> {
+  requireOperator();
   return {
     authenticated: true,
     arena: await buildArena(),
@@ -80,9 +82,10 @@ export const getAdminStatus = api(
 
 export const connectAdminRobinhood = api(
   { expose: true, auth: true, sensitive: true, method: "POST", path: "/admin/robinhood/connect" },
-  async (request: RobinhoodConnectRequest): Promise<RobinhoodConnectResponse> => ({
-    authorization_url: await startRobinhoodOAuth(request.redirect_uri),
-  }),
+  async (request: RobinhoodConnectRequest): Promise<RobinhoodConnectResponse> => {
+    requireOperator();
+    return { authorization_url: await startRobinhoodOAuth(request.redirect_uri) };
+  },
 );
 
 export const robinhoodOAuthCallback = api.raw(
@@ -112,6 +115,7 @@ export const robinhoodOAuthCallback = api.raw(
 export const syncAdminArena = api(
   { expose: true, auth: true, sensitive: true, method: "POST", path: "/admin/sync" },
   async (): Promise<AdminControlResponse> => {
+    requireOperator();
     const broker = await syncRobinhood();
     return control(
       `Robinhood reconciled at $${broker.deployable_capital.toFixed(2)} deployable capital, with $${broker.allocation_per_model.toFixed(2)} per model. ${broker.unmanaged_positions.length} unmanaged position symbols found.`,
@@ -122,6 +126,7 @@ export const syncAdminArena = api(
 export const armAdminArena = api(
   { expose: true, auth: true, sensitive: true, method: "POST", path: "/admin/arm" },
   async (request: ArmRequest): Promise<AdminControlResponse> => {
+    requireOperator();
     if (request.confirmation !== LIVE_CONSENT_CONFIRMATION) {
       throw APIError.invalidArgument(`confirmation must be exactly: ${LIVE_CONSENT_CONFIRMATION}`);
     }
@@ -135,6 +140,7 @@ export const armAdminArena = api(
 export const disarmAdminArena = api(
   { expose: true, auth: true, sensitive: true, method: "POST", path: "/admin/disarm" },
   async (): Promise<AdminControlResponse> => {
+    requireOperator();
     await disarmLiveArena();
     return control("Live execution and automation are disarmed. Open broker orders were left unchanged.");
   },
@@ -143,6 +149,7 @@ export const disarmAdminArena = api(
 export const runAdminRound = api(
   { expose: true, auth: true, sensitive: true, method: "POST", path: "/admin/round" },
   async (request: RoundRequest): Promise<RoundControlResponse> => {
+    requireOperator();
     if (request.confirmation !== LIVE_EXECUTION_CONFIRMATION) {
       throw APIError.invalidArgument(`confirmation must be exactly: ${LIVE_EXECUTION_CONFIRMATION}`);
     }
@@ -159,6 +166,7 @@ export const runAdminRound = api(
 export const haltAdminArena = api(
   { expose: true, auth: true, sensitive: true, method: "POST", path: "/admin/halt" },
   async (request: HaltRequest): Promise<AdminControlResponse> => {
+    requireOperator();
     const cancelled = await haltLiveArena(
       request.reason?.trim() || "operator halt",
       request.cancel_orders !== false,
@@ -170,6 +178,7 @@ export const haltAdminArena = api(
 export const cancelAdminOrders = api(
   { expose: true, auth: true, sensitive: true, method: "POST", path: "/admin/cancel" },
   async (): Promise<AdminControlResponse> => {
+    requireOperator();
     const cancelled = await cancelLiveOrders();
     return control(`${cancelled} open Robinhood orders were sent for cancellation.`);
   },
@@ -178,6 +187,7 @@ export const cancelAdminOrders = api(
 export const flattenAdminArena = api(
   { expose: true, auth: true, sensitive: true, method: "POST", path: "/admin/flatten" },
   async (request: FlattenRequest): Promise<AdminControlResponse> => {
+    requireOperator();
     if (request.confirmation !== FLATTEN_CONFIRMATION) {
       throw APIError.invalidArgument(`confirmation must be exactly: ${FLATTEN_CONFIRMATION}`);
     }

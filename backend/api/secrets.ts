@@ -6,6 +6,7 @@ export const robinhoodMcpAccessToken = secret("RobinhoodMCPAccessToken");
 export const robinhoodCryptoApiKey = secret("RobinhoodCryptoAPIKey");
 export const robinhoodCryptoPrivateKey = secret("RobinhoodCryptoPrivateKey");
 export const robinhoodCryptoPublicKey = secret("RobinhoodCryptoPublicKey");
+export const credentialEncryptionKey = secret("CredentialEncryptionKey");
 
 export function readOptionalSecret(getter: () => string): string | undefined {
   try {

@@ -36,6 +36,13 @@ The public dashboard shows the weekly equity chart, leaderboard, Robinhood
 quotes, model decisions, positions, orders, closed trades, and broker-backed
 capital. A position enters the ledger only after Robinhood reports its fill.
 
+`/userapp` lets a wallet owner choose one of the six OpenRouter models and give
+it a personal trading strategy. The app derives a dedicated Robinhood Chain
+wallet, accepts ETH deposits, and runs token research and LI.FI-routed swaps on
+mainnet. A completed cycle waits 12 seconds before the next turn. Failed cycles
+retry after a pause capped at 20 seconds. The owner must pause the agent before
+withdrawing ETH or ERC-20 balances back to the connected wallet.
+
 ## Execution rules
 
 Each decision cycle follows the RobinArena execution model:
@@ -72,6 +79,14 @@ Primary endpoints:
 
 ```text
 GET  /arena
+GET  /userapp/models
+GET  /userapp/account
+GET  /userapp/activity
+POST /userapp/account
+PATCH /userapp/settings
+POST /userapp/status
+POST /userapp/messages
+POST /wallet/withdraw
 GET  /admin/status
 POST /admin/robinhood/connect
 POST /admin/sync
@@ -133,6 +148,7 @@ Store runtime credentials with nstack:
 ```sh
 nstack env set OpenRouterAPIKey
 nstack env set ArenaOperatorKey
+nstack env set CredentialEncryptionKey
 nstack env push
 ```
 
@@ -140,6 +156,10 @@ nstack env push
 deployer and is separate from the OpenRouter API key and Robinhood OAuth
 connection. Local development falls back to `dev-model-market` when the
 operator key is unset. Production requires an explicit value.
+
+`CredentialEncryptionKey` encrypts every user agent private key before it is
+stored in PostgreSQL. Keep it stable across deployments. Losing or rotating it
+without a migration makes existing user agent wallets inaccessible.
 
 Connect the dedicated Robinhood Agentic account from `/admin`. OAuth tokens are
 encrypted with the operator key before storage. The broker sync reads the

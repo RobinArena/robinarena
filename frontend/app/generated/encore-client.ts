@@ -166,6 +166,28 @@ export interface ClientOptions {
 }
 
 export namespace api {
+    export interface ActivityExecution {
+        id: string
+        "token_in": string
+        "token_out": string
+        "amount_in": string
+        "quoted_amount_out": string | null
+        status: string
+        "transaction_hash": string | null
+        "failure_reason": string | null
+        "created_at": string
+    }
+
+    export interface ActivityRun {
+        id: string
+        trigger: "user" | "continuous"
+        status: "running" | "completed" | "failed"
+        "model_id": string
+        error: string | null
+        "started_at": string
+        "completed_at": string | null
+    }
+
     export interface AdminControlResponse {
         ok: boolean
         message: string
@@ -185,6 +207,23 @@ export namespace api {
         "execution_confirmation": string
         "live_consent_confirmation": string
         "flatten_confirmation": string
+    }
+
+    export interface AgentMessageRecord {
+        id: string
+        role: "user" | "assistant" | "tool"
+        content: string
+        "tool_name": string | null
+        "created_at": string
+    }
+
+    export interface AgentSettings {
+        "model_id": string
+        strategy: string
+        "agent_status": "paused" | "active"
+        "execution_mode": "autonomous"
+        "minimum_native_reserve_wei": string
+        "swap_slippage_bps": number
     }
 
     export type ArenaAction = "buy" | "sell" | "hold" | "skip"
@@ -462,6 +501,24 @@ export namespace api {
         "structured_outputs": boolean
     }
 
+    export interface PortfolioSnapshot {
+        "chain_id": RobinhoodChainID
+        "chain_name": string
+        "wallet_address": string
+        "native_balance": string
+        "native_formatted_balance": string
+        tokens: TokenBalance[]
+        "token_discovery_complete": boolean
+        "token_discovery_error": string | null
+        "block_number": string
+        "as_of": string
+    }
+
+    export interface ProvisionRequest {
+        "owner_wallet_address": string
+        signature: string
+    }
+
     export interface ReadyResponse {
         app: string
         commit: string
@@ -469,6 +526,8 @@ export namespace api {
         "uptime_seconds": number
         ok: boolean
     }
+
+    export type RobinhoodChainID = 4663
 
     export interface RobinhoodConnectRequest {
         "redirect_uri": string
@@ -514,12 +573,104 @@ export namespace api {
         "last_recovery_at"?: string
     }
 
+    export interface SendMessageRequest {
+        message: string
+    }
+
+    export interface SetAgentStatusRequest {
+        status: "paused" | "active"
+    }
+
     export interface StatusResponse {
         app: string
         commit: string
         "image_tag": string
         "database_ok": boolean
         "uptime_seconds": number
+    }
+
+    export interface SubaccountResponse {
+        id: string
+        status: "ready" | "error"
+        "owner_wallet_address": string
+        "agent_wallet_address": string
+        "derivation_version": number
+        "chain_id": 4663
+        "explorer_url": string
+        "created_at": string
+        settings: AgentSettings
+    }
+
+    export interface TokenBalance {
+        address: string
+        symbol: string
+        decimals: number
+        balance: string
+        "formatted_balance": string
+    }
+
+    export interface UpdateSettingsRequest {
+        "model_id"?: string
+        strategy?: string
+        "minimum_native_reserve_wei"?: string
+    }
+
+    export interface UserAgentActivity {
+        messages: AgentMessageRecord[]
+        executions: ActivityExecution[]
+        runs: ActivityRun[]
+    }
+
+    export interface UserAgentModel {
+        id: string
+        name: string
+        provider: string
+        code: string
+        strategy: string
+        thesis: string
+        accent: string
+        "openrouter_model": string
+    }
+
+    export interface WalletChallengeRequest {
+        address: string
+    }
+
+    export interface WalletChallengeResponse {
+        "challenge_id": string
+        message: string
+        "expires_at": string
+    }
+
+    export interface WalletLoginRequest {
+        "challenge_id": string
+        address: string
+        signature: string
+    }
+
+    export interface WalletLoginResponse {
+        token: string
+        "expires_at": string
+    }
+
+    export interface WithdrawRequest {
+        "request_id": string
+        "asset_address": string
+        amount: string
+    }
+
+    export interface WithdrawalResult {
+        id: string
+        "request_id": string
+        "asset_address": string
+        "asset_symbol": string
+        "asset_decimals": number
+        amount: string | null
+        recipient: string
+        status: "preparing" | "submitted" | "confirmed" | "failed" | "submission_unknown"
+        "transaction_hash": string | null
+        "explorer_url": string | null
+        error: string | null
     }
 
     export class ServiceClient {
@@ -535,12 +686,24 @@ export namespace api {
             this.getAdminStatus = this.getAdminStatus.bind(this)
             this.getArena = this.getArena.bind(this)
             this.getOpenRouterIntegration = this.getOpenRouterIntegration.bind(this)
+            this.getPortfolio = this.getPortfolio.bind(this)
+            this.getUserAgentAccount = this.getUserAgentAccount.bind(this)
+            this.getUserAgentActivity = this.getUserAgentActivity.bind(this)
             this.haltAdminArena = this.haltAdminArena.bind(this)
+            this.listUserAgentModels = this.listUserAgentModels.bind(this)
+            this.provisionUserAgent = this.provisionUserAgent.bind(this)
             this.ready = this.ready.bind(this)
             this.robinhoodOAuthCallback = this.robinhoodOAuthCallback.bind(this)
             this.runAdminRound = this.runAdminRound.bind(this)
+            this.sendUserAgentMessage = this.sendUserAgentMessage.bind(this)
+            this.setUserAgentStatus = this.setUserAgentStatus.bind(this)
             this.status = this.status.bind(this)
             this.syncAdminArena = this.syncAdminArena.bind(this)
+            this.updateUserAgentSettings = this.updateUserAgentSettings.bind(this)
+            this.walletChallenge = this.walletChallenge.bind(this)
+            this.walletLogin = this.walletLogin.bind(this)
+            this.walletLogout = this.walletLogout.bind(this)
+            this.withdrawFunds = this.withdrawFunds.bind(this)
         }
 
         public async armAdminArena(params: ArmRequest): Promise<AdminControlResponse> {
@@ -591,10 +754,44 @@ export namespace api {
             return await resp.json() as OpenRouterIntegration
         }
 
+        public async getPortfolio(): Promise<PortfolioSnapshot> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/portfolio`)
+            return await resp.json() as PortfolioSnapshot
+        }
+
+        public async getUserAgentAccount(): Promise<SubaccountResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/userapp/account`)
+            return await resp.json() as SubaccountResponse
+        }
+
+        public async getUserAgentActivity(): Promise<UserAgentActivity> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/userapp/activity`)
+            return await resp.json() as UserAgentActivity
+        }
+
         public async haltAdminArena(params: HaltRequest): Promise<AdminControlResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/admin/halt`, JSON.stringify(params))
             return await resp.json() as AdminControlResponse
+        }
+
+        public async listUserAgentModels(): Promise<{
+    models: UserAgentModel[]
+}> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/userapp/models`)
+            return await resp.json() as {
+    models: UserAgentModel[]
+}
+        }
+
+        public async provisionUserAgent(params: ProvisionRequest): Promise<SubaccountResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/userapp/account`, JSON.stringify(params))
+            return await resp.json() as SubaccountResponse
         }
 
         public async ready(): Promise<ReadyResponse> {
@@ -613,6 +810,24 @@ export namespace api {
             return await resp.json() as RoundControlResponse
         }
 
+        public async sendUserAgentMessage(params: SendMessageRequest): Promise<{
+    "run_id": string
+    status: "queued"
+}> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/userapp/messages`, JSON.stringify(params))
+            return await resp.json() as {
+    "run_id": string
+    status: "queued"
+}
+        }
+
+        public async setUserAgentStatus(params: SetAgentStatusRequest): Promise<AgentSettings> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/userapp/status`, JSON.stringify(params))
+            return await resp.json() as AgentSettings
+        }
+
         public async status(): Promise<StatusResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/status`)
@@ -623,6 +838,34 @@ export namespace api {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/admin/sync`)
             return await resp.json() as AdminControlResponse
+        }
+
+        public async updateUserAgentSettings(params: UpdateSettingsRequest): Promise<AgentSettings> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("PATCH", `/userapp/settings`, JSON.stringify(params))
+            return await resp.json() as AgentSettings
+        }
+
+        public async walletChallenge(params: WalletChallengeRequest): Promise<WalletChallengeResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/auth/wallet/challenge`, JSON.stringify(params))
+            return await resp.json() as WalletChallengeResponse
+        }
+
+        public async walletLogin(params: WalletLoginRequest): Promise<WalletLoginResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/auth/wallet`, JSON.stringify(params))
+            return await resp.json() as WalletLoginResponse
+        }
+
+        public async walletLogout(): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/auth/logout`)
+        }
+
+        public async withdrawFunds(params: WithdrawRequest): Promise<WithdrawalResult> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/wallet/withdraw`, JSON.stringify(params))
+            return await resp.json() as WithdrawalResult
         }
     }
 }

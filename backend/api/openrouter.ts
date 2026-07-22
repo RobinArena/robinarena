@@ -216,7 +216,7 @@ export async function requestOpenRouterDecision(input: OpenRouterDecisionInput):
     ? (input.portfolio.cash_balance / input.portfolio.equity) * 100
     : 0;
   const deepSeekDirective = input.model === "deepseek/deepseek-v4-pro"
-    ? "DeepSeek mandate: act decisively on mean-reversion dislocations. Prefer a 25-40% buy allocation when the snapshot supports the thesis, and avoid passive holds driven only by uncertainty."
+    ? "DeepSeek strategy: act decisively on mean-reversion dislocations. Prefer a 25-40% buy allocation when the snapshot supports the thesis, and avoid passive holds driven only by uncertainty."
     : "When buying, prefer a meaningful 25-40% allocation when conviction and the risk limits support it.";
 
   const system = [

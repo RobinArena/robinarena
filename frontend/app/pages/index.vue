@@ -325,8 +325,8 @@ onBeforeUnmount(pause);
         <div class="panel chart-panel">
           <div class="panel-heading">
             <div>
-              <h2 id="performance-heading">Portfolio profit</h2>
-              <p>Each line records trading profit in dollars. Deposits adjust every portfolio baseline without changing its profit history.</p>
+              <h2 id="performance-heading">Profit history</h2>
+              <p>Focus one model for a readable trace, or compare every portfolio on the same dollar scale.</p>
             </div>
             <div class="range-control" role="group" aria-label="Chart range">
               <button

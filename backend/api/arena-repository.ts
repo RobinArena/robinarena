@@ -533,23 +533,24 @@ export async function markToMarket(
     .filter((position) => position.current_price !== undefined && position.current_price > 0)
     .map((position) => ({ symbol: position.symbol, price: position.current_price }));
   await db.exec`
-    WITH broker_marks AS (
-      SELECT mark.symbol, mark.price
-      FROM jsonb_to_recordset(${JSON.stringify(brokerMarks)}::jsonb)
-        AS mark(symbol text, price numeric)
-    ), marks AS (
-      SELECT market.symbol, coalesce(broker.price, market.price) AS price
-      FROM arena_market market
-      LEFT JOIN broker_marks broker ON broker.symbol = market.symbol
-    )
     UPDATE arena_positions p SET
-      current_price = marks.price,
-      market_value = p.quantity * marks.price,
-      unrealized_pnl = p.quantity * (marks.price - p.average_entry_price),
+      current_price = market.price,
+      market_value = p.quantity * market.price,
+      unrealized_pnl = p.quantity * (market.price - p.average_entry_price),
       updated_at = now()
-    FROM marks
-    WHERE p.symbol = marks.symbol AND p.status = 'open'
+    FROM arena_market market
+    WHERE p.symbol = market.symbol AND p.status = 'open'
   `;
+  for (const mark of brokerMarks) {
+    await db.exec`
+      UPDATE arena_positions SET
+        current_price = ${mark.price},
+        market_value = quantity * ${mark.price},
+        unrealized_pnl = quantity * (${mark.price} - average_entry_price),
+        updated_at = now()
+      WHERE symbol = ${mark.symbol} AND status = 'open'
+    `;
+  }
   await db.exec`
     UPDATE arena_agents a SET
       unrealized_pnl = coalesce((

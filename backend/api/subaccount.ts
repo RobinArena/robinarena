@@ -11,12 +11,12 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
-export const DERIVATION_VERSION = 2;
+export const DERIVATION_VERSION = 3;
 export const DERIVATION_CHAIN_ID = 4663;
-export const ACCESS_WARNING = "This signature derives a key that can trade autonomously on Robinhood Chain. Only sign inside RobinArena.";
+export const ACCESS_WARNING = "This RobinArena-only signature creates a separate wallet that can trade autonomously on Robinhood Chain.";
 
-const DERIVATION_SALT = "RobinArena wallet agent HKDF-SHA256 v2";
-const DERIVATION_INFO = "RobinArena autonomous agent secp256k1 private key";
+const DERIVATION_SALT = "robinarena.fun user agent wallet HKDF-SHA256 v3";
+const DERIVATION_INFO = "RobinArena isolated Robinhood Chain agent key, chain 4663";
 const SECP256K1_ORDER = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 const robinhoodChain = defineChain({
   id: DERIVATION_CHAIN_ID,
@@ -31,11 +31,12 @@ const robinhoodClient = createPublicClient({
 
 export function subaccountMessage(owner: Address): string {
   return [
-    "Create my deterministic RobinArena agent wallet.",
+    "Authorize a separate RobinArena trading wallet.",
     "",
     `Owner wallet: ${owner}`,
     `Chain ID: ${DERIVATION_CHAIN_ID}`,
     `Derivation version: ${DERIVATION_VERSION}`,
+    "Application: https://robinarena.fun/userapp",
     "",
     ACCESS_WARNING,
   ].join("\n");

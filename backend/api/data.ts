@@ -2,6 +2,7 @@ import { APIError } from "encore.dev/api";
 import { getAuthData } from "encore.dev/internal/codegen/auth";
 import type { AuthData } from "./gateway";
 import { db } from "./db";
+import { openSecret, sealSecret, usesLegacyEncryption } from "./crypto";
 
 export type RobinhoodChainID = 4663;
 
@@ -42,6 +43,15 @@ export async function currentSubaccount(): Promise<SubaccountRow> {
     FROM trading_subaccounts WHERE owner_user_id = ${currentUserID()}
   `;
   if (!row) throw APIError.failedPrecondition("create your Robinhood Chain agent wallet before continuing");
+  if (usesLegacyEncryption(row.encrypted_agent_private_key)) {
+    const scope = `agent-key:${row.id}`;
+    const rewrapped = sealSecret(openSecret(row.encrypted_agent_private_key, scope), scope);
+    await db.exec`
+      UPDATE trading_subaccounts SET encrypted_agent_private_key = ${rewrapped}, updated_at = NOW()
+      WHERE id = ${row.id} AND encrypted_agent_private_key = ${row.encrypted_agent_private_key}
+    `;
+    row.encrypted_agent_private_key = rewrapped;
+  }
   return row;
 }
 

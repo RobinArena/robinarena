@@ -204,6 +204,10 @@ a {
   color: var(--color-text);
 }
 
+.compact-nav-label {
+  display: none;
+}
+
 .header-tools {
   display: flex;
   justify-self: end;
@@ -2596,13 +2600,23 @@ a {
   }
 
   .site-nav {
+    justify-content: space-between;
+    gap: 0;
     margin-inline: -0.15rem;
   }
 
   .site-nav a {
     min-height: 2.75rem;
-    padding-inline: 0.7rem;
-    font-size: 0.82rem;
+    padding-inline: 0.3rem;
+    font-size: 0.76rem;
+  }
+
+  .site-nav a > span:has(+ .compact-nav-label) {
+    display: none;
+  }
+
+  .compact-nav-label {
+    display: inline;
   }
 
   .arena-hero {

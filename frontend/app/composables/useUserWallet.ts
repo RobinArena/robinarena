@@ -52,13 +52,14 @@ let selectedProvider: EthereumProvider | undefined;
 
 function subaccountMessage(owner: Address): string {
   return [
-    "Create my deterministic RobinArena agent wallet.",
+    "Authorize a separate RobinArena trading wallet.",
     "",
     `Owner wallet: ${owner}`,
     "Chain ID: 4663",
-    "Derivation version: 2",
+    "Derivation version: 3",
+    "Application: https://robinarena.fun/userapp",
     "",
-    "This signature derives a key that can trade autonomously on Robinhood Chain. Only sign inside RobinArena.",
+    "This RobinArena-only signature creates a separate wallet that can trade autonomously on Robinhood Chain.",
   ].join("\n");
 }
 

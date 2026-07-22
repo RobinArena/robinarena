@@ -5,7 +5,7 @@ const navigation = computed(() => [
   { label: "Performance", to: "/#performance" },
   { label: "Decisions", to: "/#decisions" },
   { label: "Models", to: "/#models" },
-  { label: "Run an agent", to: "/userapp" },
+  { label: "Run an agent", compactLabel: "Agent", to: "/userapp" },
   { label: "Ledger", to: "/#ledger" },
   ...(route.path.startsWith("/admin") ? [{ label: "Admin", to: "/admin" }] : []),
 ]);
@@ -32,7 +32,8 @@ const themeToggleLabel = computed(() => (
           :key="item.to"
           :to="item.to"
         >
-          {{ item.label }}
+          <span>{{ item.label }}</span>
+          <span v-if="item.compactLabel" class="compact-nav-label">{{ item.compactLabel }}</span>
         </NuxtLink>
       </nav>
 

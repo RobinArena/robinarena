@@ -148,7 +148,7 @@ Store runtime credentials with nstack:
 ```sh
 nstack env set OpenRouterAPIKey
 nstack env set ArenaOperatorKey
-nstack env set CredentialEncryptionKey
+nstack env set AgentWalletEncryptionKey
 nstack env push
 ```
 
@@ -157,7 +157,7 @@ deployer and is separate from the OpenRouter API key and Robinhood OAuth
 connection. Local development falls back to `dev-model-market` when the
 operator key is unset. Production requires an explicit value.
 
-`CredentialEncryptionKey` encrypts every user agent private key before it is
+`AgentWalletEncryptionKey` encrypts every user agent private key before it is
 stored in PostgreSQL. Keep it stable across deployments. Losing or rotating it
 without a migration makes existing user agent wallets inaccessible.
 

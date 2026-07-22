@@ -5,6 +5,7 @@ const navigation = computed(() => [
   { label: "Performance", to: "/#performance" },
   { label: "Decisions", to: "/#decisions" },
   { label: "Models", to: "/#models" },
+  { label: "Chat", to: "/chat" },
   { label: "Run an agent", compactLabel: "Agent", to: "/userapp" },
   { label: "Ledger", to: "/#ledger" },
   ...(route.path.startsWith("/admin") ? [{ label: "Admin", to: "/admin" }] : []),

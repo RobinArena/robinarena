@@ -8,6 +8,8 @@ export const robinhoodCryptoPrivateKey = secret("RobinhoodCryptoPrivateKey");
 export const robinhoodCryptoPublicKey = secret("RobinhoodCryptoPublicKey");
 export const agentWalletEncryptionKey = secret("AgentWalletEncryptionKey");
 export const legacyCredentialEncryptionKey = secret("CredentialEncryptionKey");
+export const tinkerApiKey = secret("TinkerAPIKey");
+export const tradeFinderAccessTokenAddress = secret("TradeFinderAccessTokenAddress");
 
 export function readOptionalSecret(getter: () => string): string | undefined {
   try {

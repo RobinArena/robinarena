@@ -609,6 +609,34 @@ export namespace api {
         "formatted_balance": string
     }
 
+    export interface TradeFinderAccessResponse {
+        configured: boolean
+        eligible: boolean
+        "chain_id": 4663
+        "wallet_address": string
+        "token_address"?: string
+        "token_symbol": string
+        "token_decimals": number
+        balance: string
+        "formatted_balance": string
+        "required_balance": string
+        "checked_at": string
+    }
+
+    export interface TradeFinderChatRequest {
+        messages: TradeFinderMessage[]
+    }
+
+    export interface TradeFinderChatResponse {
+        message: TradeFinderMessage
+        model: "TradeFinder 1"
+    }
+
+    export interface TradeFinderMessage {
+        role: "user" | "assistant"
+        content: string
+    }
+
     export interface UpdateSettingsRequest {
         "model_id"?: string
         strategy?: string
@@ -680,6 +708,7 @@ export namespace api {
             this.baseClient = baseClient
             this.armAdminArena = this.armAdminArena.bind(this)
             this.cancelAdminOrders = this.cancelAdminOrders.bind(this)
+            this.chatWithTradeFinder = this.chatWithTradeFinder.bind(this)
             this.connectAdminRobinhood = this.connectAdminRobinhood.bind(this)
             this.disarmAdminArena = this.disarmAdminArena.bind(this)
             this.flattenAdminArena = this.flattenAdminArena.bind(this)
@@ -687,6 +716,7 @@ export namespace api {
             this.getArena = this.getArena.bind(this)
             this.getOpenRouterIntegration = this.getOpenRouterIntegration.bind(this)
             this.getPortfolio = this.getPortfolio.bind(this)
+            this.getTradeFinderAccess = this.getTradeFinderAccess.bind(this)
             this.getUserAgentAccount = this.getUserAgentAccount.bind(this)
             this.getUserAgentActivity = this.getUserAgentActivity.bind(this)
             this.haltAdminArena = this.haltAdminArena.bind(this)
@@ -716,6 +746,12 @@ export namespace api {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/admin/cancel`)
             return await resp.json() as AdminControlResponse
+        }
+
+        public async chatWithTradeFinder(params: TradeFinderChatRequest): Promise<TradeFinderChatResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/tradefinder/chat`, JSON.stringify(params))
+            return await resp.json() as TradeFinderChatResponse
         }
 
         public async connectAdminRobinhood(params: RobinhoodConnectRequest): Promise<RobinhoodConnectResponse> {
@@ -758,6 +794,12 @@ export namespace api {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/portfolio`)
             return await resp.json() as PortfolioSnapshot
+        }
+
+        public async getTradeFinderAccess(): Promise<TradeFinderAccessResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/tradefinder/access`)
+            return await resp.json() as TradeFinderAccessResponse
         }
 
         public async getUserAgentAccount(): Promise<SubaccountResponse> {

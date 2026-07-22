@@ -229,9 +229,20 @@ function tooltipTime(timestamp: number): string {
 <template>
   <div v-if="chart" class="arena-chart">
     <header class="chart-toolbar">
-      <div class="chart-focus-copy">
-        <strong>{{ focusedModel?.name || "All model portfolios" }}</strong>
-        <p>{{ focusedModel?.strategy || "Every model shares the same dollar profit scale." }}</p>
+      <div class="chart-focus-identity">
+        <ModelGlyph
+          v-if="focusedModel"
+          :code="focusedModel.code"
+          :accent="focusedModel.accent"
+          size="small"
+        />
+        <span v-else class="chart-focus-stack" aria-hidden="true">
+          <Icon name="ph:stack" />
+        </span>
+        <div class="chart-focus-copy">
+          <strong>{{ focusedModel?.name || "All model portfolios" }}</strong>
+          <p>{{ focusedModel?.strategy || "Every model shares the same dollar profit scale." }}</p>
+        </div>
       </div>
       <dl class="chart-focus-metrics">
         <div v-for="metric in focusMetrics" :key="metric.label">
@@ -321,7 +332,7 @@ function tooltipTime(timestamp: number): string {
         :style="{ '--series-accent': model.accent }"
         @click="focusPortfolio(model.id)"
       >
-        <span class="series-swatch" />
+        <ModelGlyph :code="model.code" :accent="model.accent" size="small" />
         <span><strong>{{ model.name }}</strong><small>{{ formatSignedCurrency(model.equity - model.round_starting_equity) }}</small></span>
       </button>
     </nav>
@@ -344,8 +355,10 @@ function tooltipTime(timestamp: number): string {
 <style scoped>
 .arena-chart { min-width: 0; }
 .chart-toolbar { display: grid; grid-template-columns: minmax(13rem, .75fr) minmax(24rem, 1fr); align-items: end; gap: 2rem; min-height: 6rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-line); }
+.chart-focus-identity { display: grid; min-width: 0; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .65rem; }
+.chart-focus-stack { display: inline-grid; width: 2rem; height: 2rem; place-items: center; border: 1px solid var(--color-line-strong); border-radius: var(--radius-small); background: var(--color-surface); color: var(--color-accent); }
+.chart-focus-stack svg { font-size: 1rem; }
 .chart-focus-copy { display: grid; gap: .15rem; }
-.chart-focus-copy > span { color: var(--color-quiet); font-size: .68rem; }
 .chart-focus-copy strong { overflow: hidden; font-size: 1.05rem; letter-spacing: -.025em; text-overflow: ellipsis; white-space: nowrap; }
 .chart-focus-copy p { overflow: hidden; margin: 0; color: var(--color-body-medium); font-size: .74rem; text-overflow: ellipsis; white-space: nowrap; }
 .chart-focus-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; border-left: 1px solid var(--color-line); }
@@ -370,8 +383,7 @@ function tooltipTime(timestamp: number): string {
 .chart-tooltip > div { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .45rem; margin-top: .45rem; font-size: .74rem; }
 .chart-tooltip strong { display: flex; gap: .35rem; font-family: var(--font-mono); font-size: .72rem; font-variant-numeric: tabular-nums; font-weight: 550; }
 .chart-tooltip strong small { color: var(--color-muted); font-size: .66rem; }
-.tooltip-swatch,
-.series-swatch { display: block; width: .85rem; height: 2px; background: var(--series-accent); }
+.tooltip-swatch { display: block; width: .85rem; height: 2px; background: var(--series-accent); }
 .chart-series-index { display: flex; width: 100%; overflow-x: auto; border-top: 1px solid var(--color-line); scrollbar-width: thin; }
 .chart-series-index button { display: grid; min-width: 8.7rem; flex: 1 0 8.7rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .55rem; padding: .8rem .85rem; border-right: 1px solid var(--color-line); background: var(--color-surface); color: var(--color-muted); cursor: pointer; text-align: left; transition: background-color 160ms ease, color 160ms ease; }
 .chart-series-index button:last-child { border-right: 0; }

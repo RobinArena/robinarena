@@ -158,12 +158,6 @@ onMounted(async () => {
         <h1>Ask TradeFinder 1.</h1>
         <p>Review a setup, challenge a thesis, or examine why a trading decision went wrong.</p>
       </div>
-      <div class="tradefinder-heading-meta">
-        <span>Model</span>
-        <strong>TradeFinder 1</strong>
-        <span>Network</span>
-        <strong>Robinhood Chain</strong>
-      </div>
     </header>
 
     <div v-if="pageError || walletError" class="tradefinder-alert" role="alert">
@@ -174,7 +168,7 @@ onMounted(async () => {
     <section class="tradefinder-workspace" aria-label="TradeFinder chat">
       <aside class="access-panel">
         <div class="access-model">
-          <div class="access-model-mark" aria-hidden="true">TF</div>
+          <div class="access-model-mark" aria-hidden="true"><RobinArenaMark /></div>
           <div>
             <strong>TradeFinder 1</strong>
             <span>by RobinArena</span>
@@ -278,7 +272,7 @@ onMounted(async () => {
 
           <template v-else>
             <article class="chat-message is-assistant">
-              <div class="chat-avatar" aria-hidden="true">TF</div>
+              <div class="chat-avatar" aria-hidden="true"><RobinArenaMark /></div>
               <div>
                 <header><strong>TradeFinder 1</strong><span>AI model by RobinArena</span></header>
                 <p>What decision are we reviewing? Share the asset, time horizon, current position, and the evidence behind your thesis.</p>
@@ -290,7 +284,10 @@ onMounted(async () => {
               class="chat-message"
               :class="`is-${message.role}`"
             >
-              <div class="chat-avatar" aria-hidden="true">{{ message.role === "assistant" ? "TF" : "YOU" }}</div>
+              <div class="chat-avatar" aria-hidden="true">
+                <RobinArenaMark v-if="message.role === 'assistant'" />
+                <span v-else>YOU</span>
+              </div>
               <div>
                 <header>
                   <strong>{{ message.role === "assistant" ? "TradeFinder 1" : "You" }}</strong>
@@ -299,7 +296,7 @@ onMounted(async () => {
               </div>
             </article>
             <article v-if="sending" class="chat-message is-assistant is-thinking">
-              <div class="chat-avatar" aria-hidden="true">TF</div>
+              <div class="chat-avatar" aria-hidden="true"><RobinArenaMark /></div>
               <div>
                 <header><strong>TradeFinder 1</strong><span>Reviewing the decision</span></header>
                 <p><span></span><span></span><span></span></p>
@@ -334,18 +331,16 @@ onMounted(async () => {
 
 <style scoped>
 .tradefinder-page { padding: clamp(2.5rem, 5vw, 5rem) 0 4rem; }
-.tradefinder-heading { display: flex; align-items: end; justify-content: space-between; gap: 3rem; padding-bottom: 2rem; }
+.tradefinder-heading { padding-bottom: 2rem; }
 .tradefinder-heading h1 { margin: 0; font-size: clamp(2.8rem, 6vw, 5.6rem); font-weight: 650; letter-spacing: -.065em; line-height: .94; }
 .tradefinder-heading p { max-width: 42rem; margin: 1.25rem 0 0; color: var(--color-body-medium); font-size: 1rem; }
-.tradefinder-heading-meta { display: grid; min-width: 18rem; grid-template-columns: auto auto; gap: .65rem 2rem; padding-block: .3rem; }
-.tradefinder-heading-meta span { color: var(--color-quiet); font-size: .72rem; }
-.tradefinder-heading-meta strong { justify-self: end; font-family: var(--font-mono); font-size: .72rem; font-weight: 500; }
 .tradefinder-alert { display: flex; align-items: flex-start; gap: .65rem; margin-bottom: 1rem; padding: .85rem 1rem; border: 1px solid color-mix(in srgb, var(--color-negative) 55%, var(--color-line)); color: var(--color-negative); font-size: .82rem; }
 .tradefinder-alert svg { margin-top: .1rem; flex: 0 0 auto; }
 .tradefinder-workspace { display: grid; min-height: min(46rem, calc(100dvh - 13rem)); grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr); border-block: 1px solid var(--color-line); }
 .access-panel { display: flex; min-width: 0; flex-direction: column; padding: 1.35rem 1.25rem; border-right: 1px solid var(--color-line); background: var(--color-surface); }
 .access-model { display: flex; align-items: center; gap: .8rem; }
-.access-model-mark { display: grid; width: 2.7rem; height: 2.7rem; flex: 0 0 auto; place-items: center; border: 1px solid var(--color-accent); color: var(--color-accent); font-family: var(--font-mono); font-size: .75rem; }
+.access-model-mark { display: grid; width: 2.7rem; height: 2.7rem; flex: 0 0 auto; place-items: center; color: var(--color-accent); }
+.access-model-mark svg { width: 100%; height: 100%; }
 .access-model > div:last-child { display: grid; }
 .access-model strong { font-size: .9rem; }
 .access-model span { color: var(--color-muted); font-size: .72rem; }
@@ -374,6 +369,7 @@ onMounted(async () => {
 .chat-message.is-user { background: var(--color-surface); }
 .chat-avatar { display: grid; width: 2rem; height: 2rem; place-items: center; border: 1px solid var(--color-line-strong); color: var(--color-muted); font-family: var(--font-mono); font-size: .58rem; }
 .chat-message.is-assistant .chat-avatar { border-color: var(--color-accent); color: var(--color-accent); }
+.chat-avatar svg { width: 1.35rem; height: 1.35rem; }
 .chat-message header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .55rem; }
 .chat-message header strong { font-size: .8rem; }
 .chat-message header span { color: var(--color-quiet); font-size: .68rem; }
@@ -393,8 +389,6 @@ onMounted(async () => {
 .chat-composer > p { margin: .55rem 0 0; color: var(--color-quiet); font-size: .66rem; }
 @keyframes thinking { to { opacity: .25; transform: translateY(-.18rem); } }
 @media (max-width: 54rem) {
-  .tradefinder-heading { align-items: flex-start; flex-direction: column; gap: 1.5rem; }
-  .tradefinder-heading-meta { width: 100%; }
   .tradefinder-workspace { grid-template-columns: 1fr; }
   .access-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 1.5rem; border-right: 0; border-bottom: 1px solid var(--color-line); }
   .access-rule { margin-top: 0; }

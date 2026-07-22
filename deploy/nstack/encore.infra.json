@@ -54,6 +54,12 @@
     },
     "RobinhoodMCPAccessToken": {
       "$env": "RobinhoodMCPAccessToken"
+    },
+    "TinkerAPIKey": {
+      "$env": "TinkerAPIKey"
+    },
+    "TradeFinderAccessTokenAddress": {
+      "$env": "TradeFinderAccessTokenAddress"
     }
   },
   "sql_servers": [

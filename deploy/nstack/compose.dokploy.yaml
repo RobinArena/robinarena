@@ -89,6 +89,8 @@ services:
       RobinhoodCryptoPrivateKey: "${RobinhoodCryptoPrivateKey:?set RobinhoodCryptoPrivateKey}"
       RobinhoodCryptoPublicKey: "${RobinhoodCryptoPublicKey:?set RobinhoodCryptoPublicKey}"
       RobinhoodMCPAccessToken: "${RobinhoodMCPAccessToken:?set RobinhoodMCPAccessToken}"
+      TinkerAPIKey: "${TinkerAPIKey:?set TinkerAPIKey}"
+      TradeFinderAccessTokenAddress: "${TradeFinderAccessTokenAddress:?set TradeFinderAccessTokenAddress}"
     expose:
       - "8080"
     networks:

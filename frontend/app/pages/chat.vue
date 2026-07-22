@@ -19,7 +19,6 @@ const {
   authenticated,
   busy: walletBusy,
   error: walletError,
-  wallet,
   connectWallet,
   getAccessToken,
   initialize,
@@ -35,26 +34,12 @@ const transcript = ref<ChatMessage[]>([]);
 const transcriptElement = ref<HTMLElement | null>(null);
 
 const eligible = computed(() => Boolean(access.value?.eligible));
-const connectedAddress = computed(() => wallet.value?.address || access.value?.wallet_address || "");
-const tokenLabel = computed(() => access.value?.token_symbol || "access tokens");
 const balanceLabel = computed(() => {
   if (!access.value) return "Checking balance";
   const value = Number(access.value.formatted_balance);
   if (!Number.isFinite(value)) return access.value.formatted_balance;
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(value);
 });
-const gateState = computed(() => {
-  if (!authenticated.value) return "Connect wallet";
-  if (accessLoading.value) return "Checking balance";
-  if (!access.value?.configured) return "Token pending";
-  if (!eligible.value) return "Access locked";
-  return "Access verified";
-});
-
-function shortAddress(value: string): string {
-  return value.length > 14 ? `${value.slice(0, 7)}…${value.slice(-5)}` : value;
-}
-
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   if (error && typeof error === "object" && "message" in error) {
@@ -179,21 +164,6 @@ onMounted(async () => {
           <Icon name="ph:coin" aria-hidden="true" />
           <p>Hold at least <strong>100 {{ access?.token_symbol || "tokens" }}</strong> in the connected wallet.</p>
         </div>
-
-        <dl class="access-facts">
-          <div>
-            <dt>Status</dt>
-            <dd :class="{ 'is-verified': eligible }">{{ gateState }}</dd>
-          </div>
-          <div>
-            <dt>Balance</dt>
-            <dd>{{ authenticated ? `${balanceLabel} ${tokenLabel}` : "Connect to check" }}</dd>
-          </div>
-          <div>
-            <dt>Wallet</dt>
-            <dd>{{ connectedAddress ? shortAddress(connectedAddress) : "Not connected" }}</dd>
-          </div>
-        </dl>
 
         <button
           v-if="!authenticated"
@@ -348,11 +318,6 @@ onMounted(async () => {
 .access-rule svg { margin-top: .15rem; color: var(--color-accent); font-size: 1.05rem; }
 .access-rule p { margin: 0; color: var(--color-body-medium); font-size: .78rem; line-height: 1.55; }
 .access-rule strong { color: var(--color-text); }
-.access-facts { margin: 1rem 0 1.4rem; }
-.access-facts div { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .75rem; padding: .55rem 0; }
-.access-facts dt { color: var(--color-quiet); font-size: .7rem; }
-.access-facts dd { overflow: hidden; margin: 0; color: var(--color-body-medium); font-family: var(--font-mono); font-size: .68rem; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
-.access-facts dd.is-verified { color: var(--color-positive); }
 .access-action { width: 100%; margin-top: auto; }
 .access-disconnect { display: flex; align-items: center; justify-content: center; gap: .45rem; margin-top: auto; padding: .7rem; background: transparent; color: var(--color-muted); cursor: pointer; font-size: .74rem; }
 .access-disconnect.has-primary { margin-top: .35rem; }
@@ -392,7 +357,6 @@ onMounted(async () => {
   .tradefinder-workspace { grid-template-columns: 1fr; }
   .access-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 1.5rem; border-right: 0; border-bottom: 1px solid var(--color-line); }
   .access-rule { margin-top: 0; }
-  .access-facts { grid-column: 1 / -1; }
   .access-action, .access-disconnect { grid-column: 1 / -1; margin-top: 0; }
   .access-contract { grid-column: 1 / -1; }
   .chat-panel { min-height: 38rem; }

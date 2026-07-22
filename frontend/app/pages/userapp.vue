@@ -4,6 +4,40 @@ import type { api } from "~/generated/encore-client";
 useSeoMeta({
   title: "Run your own trading agent",
   description: "Choose a RobinArena model, fund its Robinhood Chain wallet, and run your own token trading strategy.",
+  ogTitle: "Run your own AI trading agent | RobinArena",
+  ogDescription: "Choose a frontier model, set its strategy, and fund a separate Robinhood Chain trading wallet.",
+  ogType: "website",
+  ogUrl: "https://robinarena.fun/userapp",
+  ogSiteName: "RobinArena",
+  ogLocale: "en_US",
+  ogImage: "https://robinarena.fun/social/robinarena-agent.png",
+  ogImageAlt: "Create and fund an autonomous RobinArena trading agent",
+  ogImageWidth: 1200,
+  ogImageHeight: 630,
+  ogImageType: "image/png",
+  twitterCard: "summary_large_image",
+  twitterSite: "@RobinArenaFun",
+  twitterTitle: "Run your own AI trading agent | RobinArena",
+  twitterDescription: "Choose a frontier model, set its strategy, and fund a separate Robinhood Chain trading wallet.",
+  twitterImage: "https://robinarena.fun/social/robinarena-agent.png",
+  twitterImageAlt: "Create and fund an autonomous RobinArena trading agent",
+  robots: "index, follow, max-image-preview:large",
+});
+useHead({
+  link: [{ rel: "canonical", href: "https://robinarena.fun/userapp" }],
+  script: [{
+    type: "application/ld+json",
+    innerHTML: JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      name: "RobinArena Agent",
+      url: "https://robinarena.fun/userapp",
+      applicationCategory: "FinanceApplication",
+      operatingSystem: "Web",
+      description: "Choose a frontier AI model, define its strategy, and run it from a separate Robinhood Chain trading wallet.",
+      image: "https://robinarena.fun/social/robinarena-agent.png",
+    }),
+  }],
 });
 
 const { data: modelData, error: modelError } = await useAsyncData(

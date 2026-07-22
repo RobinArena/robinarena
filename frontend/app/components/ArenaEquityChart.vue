@@ -230,7 +230,6 @@ function tooltipTime(timestamp: number): string {
   <div v-if="chart" class="arena-chart">
     <header class="chart-toolbar">
       <div class="chart-focus-copy">
-        <span>{{ focusedModel ? "Focused portfolio" : "Comparison view" }}</span>
         <strong>{{ focusedModel?.name || "All model portfolios" }}</strong>
         <p>{{ focusedModel?.strategy || "Every model shares the same dollar profit scale." }}</p>
       </div>

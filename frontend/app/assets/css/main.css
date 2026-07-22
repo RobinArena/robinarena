@@ -382,117 +382,39 @@ a {
   background: var(--color-surface-raised);
 }
 
-.round-scoreboard {
-  align-self: stretch;
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  justify-content: center;
-  padding-left: clamp(2rem, 4vw, 4rem);
-  border-left: 1px solid var(--color-line-strong);
-}
-
-.round-scoreboard-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.round-scoreboard-head span {
-  color: var(--color-body-medium);
-  font-size: 0.88rem;
-  font-weight: 600;
-}
-
-.round-scoreboard-head h2 {
-  margin: 0.35rem 0 0;
-  font-size: clamp(2.7rem, 4.2vw, 4.5rem);
-  font-weight: 500;
-  letter-spacing: -0.06em;
-  line-height: 0.95;
-}
-
-.round-scoreboard-head > strong {
-  color: var(--color-positive);
-  font-size: 0.82rem;
-  font-weight: 650;
-}
-
-.round-scoreboard-head > strong.is-halted {
-  color: var(--color-negative);
-}
-
-.round-scoreboard-progress {
+.arena-hero-visual {
   position: relative;
-  height: 0.25rem;
-  margin-top: 2rem;
-  overflow: hidden;
-  background: var(--color-line-strong);
-}
-
-.round-scoreboard-progress span {
-  display: block;
-  height: 100%;
-  background: var(--color-accent);
-  transition: width 300ms ease;
-}
-
-.round-scoreboard-dates {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-top: 0.65rem;
-  color: var(--color-muted);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.round-scoreboard-dates span:nth-child(2) {
-  color: var(--color-text);
-  font-weight: 600;
-}
-
-.round-scoreboard-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  margin: 2.3rem 0 0;
-  border-top: 1px solid var(--color-line);
-}
-
-.round-scoreboard-grid > div {
-  display: grid;
-  gap: 0.35rem;
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--color-line);
-}
-
-.round-scoreboard-grid > div:nth-child(odd) {
-  padding-right: 1rem;
-  border-right: 1px solid var(--color-line);
-}
-
-.round-scoreboard-grid > div:nth-child(even) {
-  padding-left: 1rem;
-}
-
-.round-scoreboard-grid dt {
-  color: var(--color-muted);
-  font-size: 0.76rem;
-}
-
-.round-scoreboard-grid dd {
+  min-width: 0;
+  min-height: 36rem;
+  align-self: stretch;
+  place-items: center;
   margin: 0;
-  color: var(--color-text);
-  font-size: 0.86rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  padding-left: clamp(1.5rem, 4vw, 4rem);
+  border-left: 1px solid var(--color-line-strong);
+  isolation: isolate;
 }
 
-.round-scoreboard-foot {
-  margin: 1rem 0 0;
-  color: var(--color-body-medium);
-  font-size: 0.8rem;
+.arena-hero-visual::before {
+  position: absolute;
+  z-index: -1;
+  inset: 8% 2% 10% 12%;
+  border-block: 1px solid var(--color-line);
+  background:
+    linear-gradient(90deg, transparent 49.8%, var(--color-line) 50%, transparent 50.2%),
+    linear-gradient(transparent 49.8%, var(--color-line) 50%, transparent 50.2%);
+  content: "";
+  transform: rotate(-4deg);
+}
+
+.arena-hero-visual img {
+  display: block;
+  width: min(100%, 34rem);
+  height: auto;
+  max-height: 39rem;
+  object-fit: contain;
+  filter: drop-shadow(0 1.3rem 1.8rem rgb(0 0 0 / 20%));
+  transform: translateY(1rem);
 }
 
 .integration-setup {
@@ -2480,11 +2402,14 @@ a {
     padding-block: clamp(2rem, 7vw, 4rem) clamp(3.5rem, 8vw, 5rem);
   }
 
-  .round-scoreboard {
-    padding-top: 2.5rem;
-    padding-left: 0;
-    border-top: 1px solid var(--color-line-strong);
+  .arena-hero-visual {
+    min-height: 31rem;
+    padding: 0;
     border-left: 0;
+  }
+
+  .arena-hero-visual::before {
+    inset: 4% 8%;
   }
 
   .hero-copy h1 {
@@ -2663,34 +2588,12 @@ a {
     display: none;
   }
 
-  .round-scoreboard-head h2 {
-    font-size: clamp(2.65rem, 13vw, 3.7rem);
+  .arena-hero-visual {
+    min-height: 23rem;
   }
 
-  .round-scoreboard {
-    padding-top: 2rem;
-  }
-
-  .round-scoreboard-progress {
-    margin-top: 1.5rem;
-  }
-
-  .round-scoreboard-grid {
-    margin-top: 1.75rem;
-  }
-
-  .round-scoreboard-dates {
-    display: grid;
-    grid-template-columns: 1fr auto;
-  }
-
-  .round-scoreboard-dates span:nth-child(2) {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-
-  .round-scoreboard-dates span:last-child {
-    text-align: right;
+  .arena-hero-visual img {
+    max-height: 25rem;
   }
 
   .summary-grid {

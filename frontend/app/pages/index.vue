@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatCurrency, formatDateTime, formatPercent, formatPrice, formatQuantity, formatRelativeTime, formatSignedCurrency } from "~/utils/format";
+import { formatCurrency, formatPercent, formatPrice, formatQuantity, formatSignedCurrency } from "~/utils/format";
 
 useSeoMeta({
   title: "Frontier AI trading arena",
@@ -7,13 +7,35 @@ useSeoMeta({
   ogTitle: "RobinArena | Frontier AI trading arena",
   ogDescription: "Frontier AI models compete in live trading on Robinhood. Follow every decision, position, and fill.",
   ogType: "website",
-  ogUrl: "https://robinarena.fun",
-  twitterCard: "summary",
+  ogUrl: "https://robinarena.fun/",
+  ogSiteName: "RobinArena",
+  ogLocale: "en_US",
+  ogImage: "https://robinarena.fun/social/robinarena-arena.png",
+  ogImageAlt: "RobinArena, where six frontier AI models trade live on Robinhood",
+  ogImageWidth: 1200,
+  ogImageHeight: 630,
+  ogImageType: "image/png",
+  twitterCard: "summary_large_image",
+  twitterSite: "@RobinArenaFun",
   twitterTitle: "RobinArena | Frontier AI trading arena",
   twitterDescription: "Frontier AI models compete in live trading on Robinhood.",
+  twitterImage: "https://robinarena.fun/social/robinarena-arena.png",
+  twitterImageAlt: "RobinArena, where six frontier AI models trade live on Robinhood",
+  robots: "index, follow, max-image-preview:large",
 });
 useHead({
-  link: [{ rel: "canonical", href: "https://robinarena.fun" }],
+  link: [{ rel: "canonical", href: "https://robinarena.fun/" }],
+  script: [{
+    type: "application/ld+json",
+    innerHTML: JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "RobinArena",
+      url: "https://robinarena.fun/",
+      description: "Frontier AI models compete in live trading on Robinhood, with every decision, position, and fill published.",
+      image: "https://robinarena.fun/social/robinarena-arena.png",
+    }),
+  }],
 });
 
 const { data, error, status, refresh } = await useAsyncData(
@@ -30,42 +52,6 @@ const isOnline = useOnline();
 const documentVisibility = useDocumentVisibility();
 
 const leader = computed(() => data.value?.models[0]);
-const cycleTiming = computed(() => {
-  const current = data.value?.arena;
-  if (!current) return "Pending";
-  if (!current.live_armed) return "Waiting for operator";
-  if (!current.automation_enabled) return "Manual cycles";
-  const generatedAt = data.value?.generated_at
-    ? Date.parse(data.value.generated_at)
-    : Date.now();
-  const nextCycleAt = Date.parse(current.next_cycle_at);
-  return nextCycleAt <= generatedAt
-    ? "Due now"
-    : formatRelativeTime(current.next_cycle_at);
-});
-const automationLabel = computed(() => {
-  switch (data.value?.arena.scheduler_status) {
-    case "healthy":
-      return "Automated";
-    case "delayed":
-      return "Delayed";
-    case "error":
-      return "Needs attention";
-    default:
-      return "Manual";
-  }
-});
-const roundTimeLeft = computed(() => {
-  const endsAt = data.value?.arena.round_ends_at;
-  if (!endsAt) return "Pending";
-  const generatedAt = data.value?.generated_at;
-  const referenceTime = generatedAt ? Date.parse(generatedAt) : Date.now();
-  const remaining = Math.max(0, Date.parse(endsAt) - referenceTime);
-  if (remaining === 0) return "Round complete";
-  const days = Math.floor(remaining / (24 * 60 * 60 * 1000));
-  const hours = Math.floor((remaining % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-  return days > 0 ? `${days}d ${hours}h left` : `${Math.max(hours, 1)}h left`;
-});
 const filteredDecisions = computed(() => {
   if (!data.value) return [];
   return selectedModel.value === "all"
@@ -122,9 +108,9 @@ const summaryMetrics = computed(() => {
     {
       label: "Open positions",
       value: String(arena.open_positions),
-      detail: arena.pending_orders === 0
-        ? "No orders awaiting a broker update"
-        : `${arena.pending_orders} ${arena.pending_orders === 1 ? "order" : "orders"} awaiting a broker update`,
+      detail: arena.pending_orders > 0
+        ? `${arena.pending_orders} ${arena.pending_orders === 1 ? "order" : "orders"} awaiting a broker update`
+        : "",
       tone: "neutral",
     },
     {
@@ -248,61 +234,15 @@ onBeforeUnmount(pause);
           </div>
         </div>
 
-        <aside class="round-scoreboard" aria-labelledby="round-heading">
-          <div class="round-scoreboard-head">
-            <div>
-              <span>Round {{ data.arena.round_number }}</span>
-              <h2 id="round-heading">{{ roundTimeLeft }}</h2>
-            </div>
-            <strong :class="{ 'is-halted': data.arena.halted }">
-              {{ data.arena.halted ? "Halted" : "In progress" }}
-            </strong>
-          </div>
-
-          <div
-            class="round-scoreboard-progress"
-            role="progressbar"
-            aria-label="Round progress"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            :aria-valuenow="Math.round(data.arena.round_progress_pct)"
+        <figure class="arena-hero-visual">
+          <img
+            src="/art/arena-six-agents.png"
+            width="1122"
+            height="1402"
+            alt="Six AI model agents connected to a live market pulse, with the Grok, Gemini, GPT, Claude, DeepSeek, and Inkling marks"
+            fetchpriority="high"
           >
-            <span :style="{ width: `${data.arena.round_progress_pct}%` }" />
-          </div>
-          <div class="round-scoreboard-dates">
-            <span>{{ formatDateTime(data.arena.round_started_at) }}</span>
-            <span>{{ Math.round(data.arena.round_progress_pct) }}% elapsed</span>
-            <span>{{ formatDateTime(data.arena.round_ends_at) }}</span>
-          </div>
-
-          <dl class="round-scoreboard-grid">
-            <div>
-              <dt>Capital ceiling</dt>
-              <dd>{{ formatCurrency(data.arena.operator_capital_ceiling) }}</dd>
-            </div>
-            <div>
-              <dt>Decision cadence</dt>
-              <dd>Every 30 minutes</dd>
-            </div>
-            <div>
-              <dt>Next decision</dt>
-              <dd>{{ cycleTiming }}</dd>
-            </div>
-            <div>
-              <dt>Execution</dt>
-              <dd :class="data.arena.live_armed && !data.arena.halted ? 'value-positive' : ''">
-                {{ data.arena.halted ? "Halted" : data.arena.live_armed ? automationLabel : "Disarmed" }}
-              </dd>
-            </div>
-          </dl>
-
-          <p v-if="data.arena.broker_equity != null" class="round-scoreboard-foot">
-            Robinhood currently reports {{ formatCurrency(data.arena.broker_equity) }} across {{ data.models.length }} portfolios.
-          </p>
-          <p v-else class="round-scoreboard-foot">
-            Waiting for Robinhood to report the account balance.
-          </p>
-        </aside>
+        </figure>
       </header>
 
       <section v-if="data.market.length === 0 || data.robinhood.state !== 'ready'" class="integration-setup" aria-labelledby="market-state-heading">
@@ -317,7 +257,7 @@ onBeforeUnmount(pause);
         <article v-for="metric in summaryMetrics" :key="metric.label" class="summary-metric">
           <span>{{ metric.label }}</span>
           <strong :class="`is-${metric.tone}`">{{ metric.value }}</strong>
-          <small>{{ metric.detail }}</small>
+          <small v-if="metric.detail">{{ metric.detail }}</small>
         </article>
       </section>
 

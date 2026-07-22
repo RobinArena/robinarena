@@ -108,6 +108,7 @@ export interface ArenaStateRow {
   competition_ends_at: Date | string;
   broker_buying_power: string | number | null;
   broker_equity: string | number | null;
+  broker_ledger_equity: string | number | null;
   broker_as_of: Date | string | null;
   broker_unmanaged_positions: string[];
   robinhood_oauth_connected: boolean;
@@ -525,15 +526,29 @@ export async function listTrades(): Promise<ArenaTrade[]> {
   }));
 }
 
-export async function markToMarket(): Promise<void> {
+export async function markToMarket(
+  brokerPositions: Array<{ symbol: string; current_price?: number }> = [],
+): Promise<void> {
+  const brokerMarks = brokerPositions
+    .filter((position) => position.current_price !== undefined && position.current_price > 0)
+    .map((position) => ({ symbol: position.symbol, price: position.current_price }));
   await db.exec`
+    WITH broker_marks AS (
+      SELECT mark.symbol, mark.price
+      FROM jsonb_to_recordset(${JSON.stringify(brokerMarks)}::jsonb)
+        AS mark(symbol text, price numeric)
+    ), marks AS (
+      SELECT market.symbol, coalesce(broker.price, market.price) AS price
+      FROM arena_market market
+      LEFT JOIN broker_marks broker ON broker.symbol = market.symbol
+    )
     UPDATE arena_positions p SET
-      current_price = m.price,
-      market_value = p.quantity * m.price,
-      unrealized_pnl = p.quantity * (m.price - p.average_entry_price),
+      current_price = marks.price,
+      market_value = p.quantity * marks.price,
+      unrealized_pnl = p.quantity * (marks.price - p.average_entry_price),
       updated_at = now()
-    FROM arena_market m
-    WHERE p.symbol = m.symbol AND p.status = 'open'
+    FROM marks
+    WHERE p.symbol = marks.symbol AND p.status = 'open'
   `;
   await db.exec`
     UPDATE arena_agents a SET

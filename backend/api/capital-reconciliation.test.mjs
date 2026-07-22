@@ -1,6 +1,44 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { equalCapitalReconciliation } from "./capital-reconciliation.ts";
+import {
+  equalCapitalReconciliation,
+  externalCapitalFlow,
+} from "./capital-reconciliation.ts";
+
+test("ignores an absolute broker valuation gap when both snapshots move together", () => {
+  assert.equal(externalCapitalFlow({
+    previousBrokerEquity: 3784.5313,
+    currentBrokerEquity: 3791.2313,
+    previousLedgerEquity: 3805.9094,
+    currentLedgerEquity: 3812.6094,
+  }), 0);
+});
+
+test("detects deposits after removing local portfolio movement", () => {
+  assert.equal(externalCapitalFlow({
+    previousBrokerEquity: 100,
+    currentBrokerEquity: 135,
+    previousLedgerEquity: 102,
+    currentLedgerEquity: 107,
+  }), 30);
+});
+
+test("ignores sub-dollar quote timing drift", () => {
+  assert.equal(externalCapitalFlow({
+    previousBrokerEquity: 100,
+    currentBrokerEquity: 101.4,
+    previousLedgerEquity: 100,
+    currentLedgerEquity: 100.5,
+  }), 0);
+});
+
+test("does not invent a flow until a prior ledger snapshot exists", () => {
+  assert.equal(externalCapitalFlow({
+    previousBrokerEquity: 100,
+    currentBrokerEquity: 150,
+    currentLedgerEquity: 100,
+  }), 0);
+});
 
 test("splits a capital deposit equally across every agent", () => {
   const result = equalCapitalReconciliation(180, [

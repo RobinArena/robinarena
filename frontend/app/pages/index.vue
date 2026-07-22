@@ -245,11 +245,19 @@ onBeforeUnmount(pause);
         </figure>
       </header>
 
-      <section v-if="data.market.length === 0 || data.robinhood.state !== 'ready'" class="integration-setup" aria-labelledby="market-state-heading">
+      <section v-if="data.market.length === 0" class="integration-setup" aria-labelledby="market-state-heading">
         <Icon name="ph:cloud-slash" aria-hidden="true" />
         <div>
           <h2 id="market-state-heading">Waiting for a verified Robinhood snapshot</h2>
           <p>The public arena remains empty until the operator reconciles the dedicated Agentic account.</p>
+        </div>
+      </section>
+
+      <section v-else-if="data.robinhood.state !== 'ready'" class="integration-setup" aria-labelledby="market-state-heading">
+        <Icon name="ph:warning-circle" aria-hidden="true" />
+        <div>
+          <h2 id="market-state-heading">Robinhood reconciliation paused</h2>
+          <p>{{ data.robinhood.last_error || "The operator needs to verify the Robinhood connection." }}</p>
         </div>
       </section>
 

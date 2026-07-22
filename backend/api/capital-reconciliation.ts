@@ -10,9 +10,30 @@ export interface EqualCapitalReconciliation {
   difference: number;
 }
 
+export interface CapitalFlowSnapshot {
+  currentBrokerEquity: number;
+  previousBrokerEquity?: number;
+  currentLedgerEquity: number;
+  previousLedgerEquity?: number;
+}
+
 function rounded(value: number, precision = 4): number {
   const factor = 10 ** precision;
   return Math.round(value * factor) / factor;
+}
+
+export function externalCapitalFlow(
+  snapshot: CapitalFlowSnapshot,
+  tolerance = 1,
+): number {
+  if (
+    snapshot.previousBrokerEquity === undefined
+    || snapshot.previousLedgerEquity === undefined
+  ) return 0;
+  const brokerChange = snapshot.currentBrokerEquity - snapshot.previousBrokerEquity;
+  const ledgerChange = snapshot.currentLedgerEquity - snapshot.previousLedgerEquity;
+  const flow = rounded(brokerChange - ledgerChange);
+  return Math.abs(flow) <= tolerance ? 0 : flow;
 }
 
 export function equalCapitalReconciliation(

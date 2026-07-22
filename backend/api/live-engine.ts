@@ -1,5 +1,8 @@
 import { APIError } from "encore.dev/api";
-import { equalCapitalReconciliation } from "./capital-reconciliation";
+import {
+  equalCapitalReconciliation,
+  externalCapitalFlow,
+} from "./capital-reconciliation";
 import {
   COMPETITION_ROUND_DAYS,
   arenaTradingSession,
@@ -875,17 +878,20 @@ export async function ensureWeeklyCompetition(): Promise<void> {
 async function reconcileArenaCapital(account: {
   buying_power: number;
   equity: number;
-}): Promise<void> {
+}): Promise<number> {
   const tx = await db.begin();
   try {
     const state = await tx.queryRow<{
       capital_limit: string | number;
       capital_initialized_at: Date | string | null;
+      broker_equity: string | number | null;
+      broker_ledger_equity: string | number | null;
     }>`
-      SELECT capital_limit, capital_initialized_at
+      SELECT capital_limit, capital_initialized_at, broker_equity, broker_ledger_equity
       FROM arena_state WHERE id = 1 FOR UPDATE
     `;
     if (!state) throw new Error("arena state is missing");
+    const capitalWasInitialized = Boolean(state.capital_initialized_at);
     const agents = await tx.queryAll<{
       id: string;
       initial_balance: string | number;
@@ -899,13 +905,27 @@ async function reconcileArenaCapital(account: {
     `;
     if (agents.length === 0) throw new Error("capital reconciliation requires at least one agent");
     const brokerCapital = rounded(Math.max(0, account.equity), 2);
+    const ledgerEquity = rounded(
+      agents.reduce((total, agent) => total + numeric(agent.equity), 0),
+      4,
+    );
     let capitalLimit = brokerCapital;
     let reconciliation: ReturnType<typeof equalCapitalReconciliation> | undefined;
 
-    if (state.capital_initialized_at) {
+    if (capitalWasInitialized) {
       try {
+        const capitalFlow = externalCapitalFlow({
+          currentBrokerEquity: brokerCapital,
+          previousBrokerEquity: state.broker_equity === null
+            ? undefined
+            : numeric(state.broker_equity),
+          currentLedgerEquity: ledgerEquity,
+          previousLedgerEquity: state.broker_ledger_equity === null
+            ? undefined
+            : numeric(state.broker_ledger_equity),
+        });
         reconciliation = equalCapitalReconciliation(
-          brokerCapital,
+          ledgerEquity + capitalFlow,
           agents.map((agent) => ({
             initialBalance: numeric(agent.initial_balance),
             cashBalance: numeric(agent.cash_balance),
@@ -945,7 +965,7 @@ async function reconcileArenaCapital(account: {
       WHERE id = 1
     `;
 
-    if (!state.capital_initialized_at) {
+    if (!capitalWasInitialized) {
       const activity = await tx.queryRow<{ count: string | number }>`
         SELECT
           (SELECT count(*) FROM arena_orders)
@@ -1025,6 +1045,9 @@ async function reconcileArenaCapital(account: {
       }
     }
     await tx.commit();
+    return capitalWasInitialized
+      ? rounded(ledgerEquity + (reconciliation?.difference || 0), 4)
+      : capitalLimit;
   } catch (cause) {
     await tx.rollback();
     throw cause;
@@ -1043,12 +1066,13 @@ export async function syncRobinhood(): Promise<BrokerAccountSummary> {
     ]);
     await recordQuotes(quotes);
     await reconcileOrders(remoteOrders);
-    await markToMarket();
-    await reconcileArenaCapital(account);
+    await markToMarket(brokerPositions);
+    const ledgerEquity = await reconcileArenaCapital(account);
     const unmanaged = await unmanagedBrokerSymbols(brokerPositions);
     await db.exec`
       UPDATE arena_state SET broker_buying_power = ${account.buying_power},
         broker_equity = ${account.equity}, broker_as_of = ${account.as_of},
+        broker_ledger_equity = ${ledgerEquity},
         broker_unmanaged_positions = ${unmanaged}, last_robinhood_sync_at = now(),
         robinhood_error = NULL, updated_at = now()
       WHERE id = 1

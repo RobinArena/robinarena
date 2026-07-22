@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "encore.dev": "^1.57.11",
+    "encore.dev": "^1.57.12",
     "viem": "2.52.0"
   },
   "devDependencies": {

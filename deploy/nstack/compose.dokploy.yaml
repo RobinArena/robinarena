@@ -82,6 +82,7 @@ services:
       NSTACK_DOMAIN: "robinarena.fun"
       NSTACK_POSTGRES_PASSWORD: "${NSTACK_POSTGRES_PASSWORD:?set NSTACK_POSTGRES_PASSWORD}"
       ArenaOperatorKey: "${ArenaOperatorKey:?set ArenaOperatorKey}"
+      CredentialEncryptionKey: "${CredentialEncryptionKey:?set CredentialEncryptionKey}"
       OpenRouterAPIKey: "${OpenRouterAPIKey:?set OpenRouterAPIKey}"
       RobinhoodCryptoAPIKey: "${RobinhoodCryptoAPIKey:?set RobinhoodCryptoAPIKey}"
       RobinhoodCryptoPrivateKey: "${RobinhoodCryptoPrivateKey:?set RobinhoodCryptoPrivateKey}"

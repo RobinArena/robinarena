@@ -31,6 +31,9 @@
     ]
   },
   "secrets": {
+    "AgentWalletEncryptionKey": {
+      "$env": "AgentWalletEncryptionKey"
+    },
     "ArenaOperatorKey": {
       "$env": "ArenaOperatorKey"
     },

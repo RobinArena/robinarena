@@ -19,8 +19,8 @@ importers:
   backend:
     dependencies:
       encore.dev:
-        specifier: ^1.57.11
-        version: 1.57.11
+        specifier: ^1.57.13
+        version: 1.57.13
       viem:
         specifier: 2.52.0
         version: 2.52.0(typescript@5.8.3)
@@ -1905,8 +1905,8 @@ packages:
     resolution: {integrity: sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==}
     engines: {node: '>= 0.8'}
 
-  encore.dev@1.57.11:
-    resolution: {integrity: sha512-LyOcQS2IYwmyAyfgss5bT8fsCOVvQLwtqXiU7lVji67AkpTk0fqjFGkV1OmaqhOf/GU1t4B4dPM2q95PAQaT0A==}
+  encore.dev@1.57.13:
+    resolution: {integrity: sha512-PZGLZ2V8XhRymXkpSZaKmO/JlV/8GArEjArjuFmEHDGU7zOgIcdKCw/y7ted0aH7dDqv9fofEClfBl55y+4mPA==}
     engines: {node: '>=18.0.0'}
 
   entities@4.5.0:
@@ -5754,7 +5754,7 @@ snapshots:
 
   encodeurl@2.0.0: {}
 
-  encore.dev@1.57.11: {}
+  encore.dev@1.57.13: {}
 
   entities@4.5.0: {}
 
